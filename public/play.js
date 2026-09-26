@@ -1,6 +1,6 @@
 import {
   $, api, el, store, fmtCountdown, fmtTime, distanceM, createMap, labeledMarker, meetingMarker, cssVar, getConfig,
-  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone,
+  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone, errorContext,
 } from './common.js';
 import { t, lang, applyI18n, langButton, langHeader } from './i18n.js';
 
@@ -46,6 +46,10 @@ let autoFit = null;        // zuletzt automatisch gewählter Ausschnitt, bis der
 let seenPingAt = Number(store.get('mh_seen_ping')) || 0;
 let warnedFor = 0;         // für welchen Ping-Zeitpunkt die Vorwarnung schon kam
 let soundOn = store.get('mh_sound') !== 'off';
+// Sonnenmodus: maximaler Kontrast, größere Schrift und Kartenbeschriftung (pro Gerät gemerkt)
+let sunOn = store.get('mh_sun') === 'on';
+const applyTheme = () => { if (sunOn) document.documentElement.dataset.theme = 'sun'; else delete document.documentElement.dataset.theme; };
+applyTheme();
 
 // Handy-Check
 const check = { sound: store.get('mh_check_sound') || 'untested', asking: false, sentKey: '', overlay: false };
@@ -97,7 +101,7 @@ async function init() {
   }).observe(container);
   poll();
   setInterval(renderTimers, 1000);
-  setInterval(() => maybeSend(), 2000);
+  setInterval(() => maybeSend(), 1000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || stopped) return;
     if (tracking && !wakeLock) requestWakeLock();
@@ -165,12 +169,25 @@ function onPositionError(e) {
   render();
 }
 
+// Akku sparen: nur senden, wenn es etwas Neues gibt – aber kurz vor jedem Ping häufig,
+// damit die Jäger eine frische Position bekommen. Der Herzschlag hält die Signal-Warnung der Aufsicht ruhig.
+function sendPolicy() {
+  const room = S?.room;
+  if (!room || room.status === 'lobby') return { heartbeat: 30000, minGap: 10000, minMove: 25 };
+  if (room.status === 'running' && S.me.role === 'runner') {
+    const left = room.nextPingAt - now();
+    if (left > -3000 && left < 30000) return { heartbeat: 3000, minGap: 3000, minMove: 0 };
+  }
+  return { heartbeat: 20000, minGap: 5000, minMove: 15 };
+}
+
 let lastSentPos = null;
 function maybeSend(force = false) {
   if (!tracking || stopped) return;
   const since = Date.now() - lastSentAt;
-  const moved = lastPos && lastSentPos ? distanceM(lastPos, lastSentPos) : Infinity;
-  if (force || since > 10000 || (since > 3000 && moved > 10)) sendPosition();
+  const moved = !lastPos ? 0 : lastSentPos ? distanceM(lastPos, lastSentPos) : Infinity;
+  const p = sendPolicy();
+  if (force || since >= p.heartbeat || (since >= p.minGap && moved >= p.minMove)) sendPosition();
 }
 
 async function sendPosition() {
@@ -207,7 +224,17 @@ async function poll() {
   } catch (e) {
     handleError(e);
   }
-  if (!stopped) pollTimer = setTimeout(poll, 3000);
+  if (!stopped) pollTimer = setTimeout(poll, pollDelay());
+}
+
+// Akku sparen: Jäger im Spiel brauchen Pings und Mitjäger schnell, alle anderen seltener
+function pollDelay() {
+  if (!online) return 5000;
+  if (document.visibilityState === 'hidden') return 15000;
+  const room = S?.room;
+  if (!room) return 3000;
+  if (room.status === 'running') return S.me.role === 'hunter' ? 3000 : 5000;
+  return room.status === 'ended' ? 10000 : 5000;
 }
 
 function handleError(e) {
@@ -246,7 +273,12 @@ function showBanner(id, text, { cls = '', sticky = false, onClose } = {}) {
 function detectChanges() {
   const { room, me } = S;
   if (prev.status && prev.status !== room.status) {
-    if (room.status === 'running') { showBanner('status', t('banner.started')); vibrate([300, 100, 300]); sound('start'); }
+    if (room.status === 'running') {
+      showBanner('status', t('banner.started'));
+      vibrate([300, 100, 300]);
+      sound('start');
+      setTimeout(() => maybeSend(true)); // Spielleitung sieht sofort alle Positionen
+    }
     if (room.status === 'lobby') showBanner('status', t('banner.lobby'));
     if (room.status === 'ended') sound('start');
   }
@@ -303,6 +335,7 @@ function detectChanges() {
 function render() {
   if (!S || stopped) return;
   const { room, me } = S;
+  errorContext.role = room.status === 'lobby' ? 'lobby' : me.role;
   $('#roomName').textContent = room.name;
   document.title = `Manhunt – ${room.name}`;
   const badge = $('#roleBadge');
@@ -452,7 +485,8 @@ function buildContent() {
   const row = el('div', { class: 'row' },
     el('button', { class: 'btn', type: 'button', onclick: centerOnMe, text: t('btn.center') }),
     el('button', { class: 'btn', type: 'button', onclick: showRules, text: t('btn.rules') }),
-    el('button', { class: 'btn', type: 'button', onclick: toggleSound, text: soundOn ? t('btn.soundOn') : t('btn.soundOff') }));
+    el('button', { class: 'btn', type: 'button', onclick: toggleSound, text: soundOn ? t('btn.soundOn') : t('btn.soundOff') }),
+    el('button', { class: `btn ${sunOn ? 'primary' : ''}`, type: 'button', onclick: toggleSun, 'aria-pressed': String(sunOn), text: t('btn.sun') }));
   if (room.status !== 'lobby') row.append(el('button', { class: 'btn', type: 'button', onclick: openCheck, text: t('btn.check') }));
   if (room.status === 'lobby') row.append(el('button', { class: 'btn', type: 'button', onclick: rename, text: t('btn.rename') }));
   actions.append(row);
@@ -809,6 +843,16 @@ function toggleSound() {
   render();
 }
 
+function toggleSun() {
+  sunOn = !sunOn;
+  store.set('mh_sun', sunOn ? 'on' : 'off');
+  applyTheme();
+  // Farben und Größen der Kartenpunkte hängen vom Modus ab – alles neu zeichnen
+  pingsKey = null;
+  ownStyleKey = '';
+  render();
+}
+
 function showMeeting(mp) {
   autoFit = null;
   map.setView([mp.lat, mp.lng], 17);
@@ -826,6 +870,7 @@ function centerOnMe() {
 
 let zoneKey = '';
 let meetingKey = '';
+let pingsKey = '';
 function drawMap() {
   if (!map) return;
   const { room } = S;
@@ -843,32 +888,38 @@ function drawMap() {
     drawZone(layers.zone, room.zone, room.zoneFinalRadius);
   }
 
-  layers.pings.clearLayers();
+  // Pings nur neu zeichnen, wenn ein neuer dazukommt (spart Akku bei jeder Abfrage)
   const pings = S.pings || [];
+  const scale = sunOn ? 1.35 : 1;
   const hunterColor = cssVar('--hunter'), runnerColor = cssVar('--runner');
-  // Spur pro Gejagtem über die letzten Pings (blockierte oder fehlende Positionen haben keine Koordinaten)
-  const trails = {};
-  pings.forEach((ping, i) => {
-    const latest = i === pings.length - 1;
-    for (const pos of ping.positions) {
-      if (pos.lat == null) continue;
-      (trails[pos.playerId] ??= []).push([pos.lat, pos.lng]);
-      labeledMarker([pos.lat, pos.lng], {
-        color: runnerColor,
-        radius: latest ? 9 : 5,
-        fill: latest ? 0.9 : 0.35,
-        label: latest ? `${pos.name} · ${fmtTime(ping.at)}` : null,
-      }).addTo(layers.pings);
+  const pKey = pings.map((p) => p.id).join();
+  if (pKey !== pingsKey) {
+    pingsKey = pKey;
+    layers.pings.clearLayers();
+    // Spur pro Gejagtem über die letzten Pings (blockierte oder fehlende Positionen haben keine Koordinaten)
+    const trails = {};
+    pings.forEach((ping, i) => {
+      const latest = i === pings.length - 1;
+      for (const pos of ping.positions) {
+        if (pos.lat == null) continue;
+        (trails[pos.playerId] ??= []).push([pos.lat, pos.lng]);
+        labeledMarker([pos.lat, pos.lng], {
+          color: runnerColor,
+          radius: (latest ? 9 : 5) * scale,
+          fill: latest ? 0.9 : 0.35,
+          label: latest ? `${pos.name} · ${fmtTime(ping.at)}` : null,
+        }).addTo(layers.pings);
+      }
+    });
+    for (const pts of Object.values(trails)) {
+      if (pts.length > 1) L.polyline(pts, { color: runnerColor, weight: 2 * scale, opacity: 0.5, dashArray: '4 6' }).addTo(layers.pings);
     }
-  });
-  for (const pts of Object.values(trails)) {
-    if (pts.length > 1) L.polyline(pts, { color: runnerColor, weight: 2, opacity: 0.5, dashArray: '4 6' }).addTo(layers.pings);
   }
 
   layers.hunters.clearLayers();
   for (const h of room.status === 'running' ? S.hunters || [] : []) {
     const stale = now() - h.t > 120000;
-    labeledMarker([h.lat, h.lng], { color: hunterColor, radius: 7, fill: stale ? 0.3 : 0.9, label: h.name, className: stale ? 'old' : '' })
+    labeledMarker([h.lat, h.lng], { color: hunterColor, radius: 7 * scale, fill: stale ? 0.3 : 0.9, label: h.name, className: stale ? 'old' : '' })
       .addTo(layers.hunters);
   }
   drawOwn();
@@ -893,14 +944,27 @@ function initialView() {
   centered = true;
 }
 
+// Eigene Position: Das GPS meldet sich bis zu jede Sekunde – die Marker werden nur verschoben, nicht neu gebaut
+let ownDot = null;
+let ownAcc = null;
+let ownStyleKey = '';
 function drawOwn() {
   if (!map || !lastPos) return;
-  layers.own.clearLayers();
   const color = S?.me.role === 'hunter' ? cssVar('--hunter') : S?.me.role === 'runner' ? cssVar('--runner') : '#666';
-  if (lastPos.acc < 500) L.circle([lastPos.lat, lastPos.lng], { radius: lastPos.acc, color, weight: 1, fillOpacity: 0.08 }).addTo(layers.own);
-  L.circleMarker([lastPos.lat, lastPos.lng], { radius: 9, color: '#fff', weight: 3, fillColor: color, fillOpacity: 1 })
-    .bindTooltip(t('map.you'), { permanent: true, direction: 'right', offset: [10, 0], className: 'map-label' })
-    .addTo(layers.own);
+  const styleKey = `${color}|${sunOn}`;
+  if (styleKey !== ownStyleKey) {
+    ownStyleKey = styleKey;
+    layers.own.clearLayers();
+    ownAcc = L.circle([lastPos.lat, lastPos.lng], { radius: lastPos.acc, color, weight: 1, fillOpacity: 0.08 });
+    ownDot = L.circleMarker([lastPos.lat, lastPos.lng], { radius: sunOn ? 12 : 9, color: '#fff', weight: 3, fillColor: color, fillOpacity: 1 })
+      .bindTooltip(t('map.you'), { permanent: true, direction: 'right', offset: [10, 0], className: 'map-label' })
+      .addTo(layers.own);
+  }
+  const ll = [lastPos.lat, lastPos.lng];
+  ownDot.setLatLng(ll);
+  ownAcc.setLatLng(ll).setRadius(lastPos.acc);
+  if (lastPos.acc >= 500) layers.own.removeLayer(ownAcc);
+  else if (!layers.own.hasLayer(ownAcc)) ownAcc.addTo(layers.own).bringToBack();
   initialView();
 }
 

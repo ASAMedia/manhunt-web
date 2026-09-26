@@ -66,7 +66,7 @@ export default async function extras({ base, adminPass, check, section, tiles })
   check((await req('GET', '/api/join/NOPE99')).data.error === 'Spiel nicht gefunden – Code prüfen.', 'sonst Deutsch');
 
   section('App & Seiten');
-  let m = await req('GET', '/manifest.webmanifest');
+  const m = await req('GET', '/manifest.webmanifest');
   let man = m.data;
   check(m.ct.includes('application/manifest+json') && man.start_url === '/' && man.display === 'standalone', 'Manifest (Start /)');
   check(man.icons.some((i) => i.purpose === 'maskable') && man.icons.some((i) => i.sizes === '512x512'), 'Manifest-Icons inkl. maskable');

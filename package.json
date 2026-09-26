@@ -6,7 +6,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "lint": "eslint .",
+    "loadtest": "node test/load.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -15,5 +17,10 @@
   "dependencies": {
     "leaflet": "^1.9.4",
     "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.12.0"
   }
 }

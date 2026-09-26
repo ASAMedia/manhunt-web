@@ -26,6 +26,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Regeln | „📋 Regeln“ auf jedem Handy – Standardregeln aus den Einstellungen oder eigener Text |
 | Töne | bei Ping, Vorwarnung, Start, Gefangen, Nachricht; pro Handy abschaltbar |
 | Sprachen | Spielerseiten auf **Deutsch und Englisch** (automatisch nach Handy-Sprache, umschaltbar) |
+| **Sonnenmodus** | „☀️ Sonnenmodus“ auf dem Handy: maximaler Kontrast, größere Schrift und Kartenbeschriftung für draußen |
 
 **Sicherheit & Aufsicht**
 
@@ -45,6 +46,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 |---|---|
 | Druckblatt | A4 mit QR-Code, Kurzanleitung, Eckdaten und Regeln – zum Ausdrucken oder Beamern |
 | Probespiel | Test-Geräte, die selbst über die Karte laufen – zum Ausprobieren allein |
+| **Raum kopieren** | Spielfeld, Treffpunkt, Regeln und alle Einstellungen in einen neuen Raum übernehmen (ohne Geräte) – z. B. für die zweite Klasse oder Runde |
 | Auswertung | pro Runde: wer wann gefangen wurde, Pings, Blocks, Notfälle; CSV-Export (Excel); keine Bewegungsspuren |
 | Hilfe | `/hilfe` – Kurzanleitung für Spielleitung und Aufsicht (druckbar) |
 | Datenschutz | `/datenschutz` – für Schüler und Eltern, Deutsch/Englisch, passend zur Konfiguration |
@@ -56,7 +58,10 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Als App installierbar | „Zum Home-Bildschirm“ mit Icon und Vollbild; die installierte App weiß, in welchem Spiel man ist |
 | Offline-Karte | Kartenkacheln laufen über einen Zwischenspeicher auf deinem Server; im Handy-Check „Karte speichern“ lädt das Spielfeld für Funklöcher (U-Bahn) vor |
 | Automatisches Löschen | Räume samt Standortdaten 7 Tage nach der letzten Aktivität (einstellbar, laufende Spiele nie) |
-| Tests | über 160 automatische Prüfungen (`npm test`), laufen auf GitHub vor jedem Image-Build |
+| Akku sparen | Handys fragen nur so oft wie nötig ab (Jäger 3 s, sonst 5–15 s) und senden den Standort bei Bewegung bzw. alle 20 s – kurz vor jedem Ping aber alle 3 s |
+| **Fehlerberichte** | Skriptfehler auf Handys landen im Server-Log und unten in der Raumliste – ohne Namen, Standort oder Spieler-Link |
+| Version | steht unten im Admin-Bereich (mit Commit und Build-Datum) |
+| Tests | über 190 automatische Prüfungen (`npm test`), Linting, `npm audit` und Image-Scan laufen auf GitHub vor bzw. nach jedem Image-Build |
 | Automatische Updates | optional, nachts um 4 Uhr |
 
 **Spielende:** Alle Gejagten gefangen → die Jäger gewinnen. Zeit abgelaufen → die verbliebenen Gejagten gewinnen.
@@ -93,9 +98,13 @@ docker compose pull && docker compose up -d
 
 Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:packages`, selbst eingeben): `docker login ghcr.io -u ASAMedia`.
 
+> **Während der Klassenfahrt:** `autoupdate` aus `COMPOSE_PROFILES` nehmen und einmal `docker compose up -d --remove-orphans` – dann ändert sich bis zur Rückkehr nichts mehr am Server.
+
+> **Datenschutz beim Tunnel:** Beim Cloudflare-Tunnel läuft der gesamte Verkehr (inkl. Standorte) über Cloudflare. Für Schulen ist eine eigene Domain mit dem Profil `caddy` auf einem Server in der EU die bessere Wahl.
+
 > **Tunnel:** Die Adresse ändert sich bei jedem Neustart des Tunnels. Am Spieltag also nicht neu starten; falls doch, beigetretene Geräte über den Wiederbeitritts-QR (⋯ in der Geräte-Liste) wieder verbinden.
 
-> **Vorhandener Reverse Proxy:** die (Sub-)Domain per HTTPS auf `http://127.0.0.1:3000` weiterleiten, `PUBLIC_URL=https://…` setzen. Läuft der Proxy selbst in Docker, statt des Ports sein Netzwerk an den Dienst `app` hängen.
+> **Vorhandener Reverse Proxy:** die (Sub-)Domain per HTTPS auf `http://127.0.0.1:3000` weiterleiten, `PUBLIC_URL=https://…` setzen. Der Proxy muss die Adresse des Handys an `X-Forwarded-For` **anhängen** (nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`) – die App wertet den letzten Eintrag aus (Rate-Limits pro Gerät). Zugriffs-Logs des Proxys besser aus lassen: Wiederbeitritts-Links (`/r/…`) sind Zugangsschlüssel. Läuft der Proxy selbst in Docker, statt des Ports sein Netzwerk an den Dienst `app` hängen.
 
 ## Ablauf am Spieltag
 
@@ -125,6 +134,10 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 - **Kartenkacheln** kommen über deinen Server (Zwischenspeicher, `TILE_PROXY=1`): Die Handys verbinden sich nicht mit OpenStreetMap, jede Kachel wird nur einmal geholt. „Route“-Links öffnen Google Maps nur auf Tippen (mit dem Ziel, nicht dem Standort).
 - **Automatisches Löschen** nach `AUTO_DELETE_DAYS` Tagen (Standard 7); Löschungen werden sofort gespeichert. Früher löschen: Raum löschen oder `docker compose down -v`.
 - Die Seite `/datenschutz` erklärt das Schülern und Eltern; `PRIVACY_CONTACT` nennt dort den Ansprechpartner.
+- Suchmaschinen sind ausgesperrt (`robots.txt` und `X-Robots-Tag: noindex`).
+- Nach Spielende nimmt der Server Standorte nur noch 2 Stunden an (Rückweg zum Treffpunkt) – eine später zu Hause geöffnete App sendet nichts mehr.
+- Wer während eines laufenden Spiels beitritt, wird Jäger – die Aufsicht bekommt dazu eine gelbe Warnung „Neu im laufenden Spiel“ und kann unbekannte Geräte entfernen. Am sichersten: vor dem Start **Beitritt schließen**.
+- Fehlerberichte von Handys enthalten keine Namen, Standorte oder Spieler-Links und liegen nur im Arbeitsspeicher (max. 100).
 - Standortdaten Minderjähriger: Eltern vorab informieren und Einverständnis einholen (z. B. im Elternbrief).
 
 ## Konfiguration (`.env`)
@@ -139,6 +152,7 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 | `PRIVACY_CONTACT` | Ansprechpartner auf der Datenschutz-Seite |
 | `AUTO_DELETE_DAYS` | Tage bis zum automatischen Löschen (Standard 7, `0` = nie) |
 | `TILE_PROXY` | Karten über den Server zwischenspeichern (Standard `1`) |
+| `TILE_CACHE_MAX_MB` | Obergrenze für den Kartenspeicher (Standard 1000 MB) |
 | `MAP_CENTER` | Kartenmitte beim Öffnen, `lat,lng` (Standard: Berlin-Mitte) |
 | `TILE_URL`, `TILE_ATTRIBUTION` | anderer Kartenanbieter |
 | `LOCAL_PORT` | lokaler Port (Standard 3000) |
@@ -148,8 +162,12 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 
 ```bash
 npm install
+npm run lint
 npm test
+npm run loadtest -- --phones 60 --minutes 30
 docker compose up -d --build
 ```
 
-`npm test` startet einen eigenen Testserver (freier Port, Testdaten, Schein-Kartenserver) und prüft Spielablauf, Rechte, Notfälle, Warnungen, Blocks, Handy-Check, Kacheln, Manifest, Export und automatisches Löschen. `docker-compose.override.yml` sorgt dafür, dass lokal aus dem Quellcode gebaut wird (`http://localhost:3000/admin`). Node.js ≥ 20.
+`npm test` startet einen eigenen Testserver (freier Port, Testdaten, Schein-Kartenserver) und prüft Spielablauf, Rechte, Notfälle, Warnungen, Blocks, Handy-Check, Kacheln, Manifest, Export und automatisches Löschen. `npm run loadtest` simuliert viele Handys mit dem echten Abfrage- und Sende-Rhythmus und meldet Antwortzeiten, Fehler, CPU und RAM – auch gegen einen laufenden Server: `LOAD_ADMIN_PASSWORD=… npm run loadtest -- --base http://localhost:3000 --container <Containername>`.
+
+Aufbau: `server.js` startet nur; die Logik liegt in `src/` (`game.js` Spielregeln, `views.js` wer was sieht, `routes/` API, `http.js` Anmeldung/Sicherheit, `tiles.js` Karten-Zwischenspeicher, `store.js` Speichern). `docker-compose.override.yml` sorgt dafür, dass lokal aus dem Quellcode gebaut wird (`http://localhost:3000/admin`). Node.js ≥ 20.

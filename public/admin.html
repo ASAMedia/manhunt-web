@@ -41,10 +41,21 @@
       </div>
       <form id="newRoomForm" class="card row admin-only" style="margin-bottom:1rem">
         <input id="newRoomName" maxlength="24" placeholder="Name des neuen Raums, z. B. Runde 1" aria-label="Raumname">
+        <select id="copyFrom" aria-label="Einstellungen übernehmen von" title="Spielfeld, Treffpunkt, Regeln und alle Einstellungen eines bestehenden Raums übernehmen (ohne Geräte)">
+          <option value="">Neue Einstellungen</option>
+        </select>
         <button class="btn primary" type="submit">Raum erstellen</button>
       </form>
       <div id="roomGrid" class="room-grid"></div>
       <p id="noRooms" class="muted hidden">Noch keine Räume. Erstelle oben den ersten.</p>
+
+      <!-- Skriptfehler von Handys (ohne Namen/Standorte) – nur sichtbar, wenn es welche gibt -->
+      <details id="clientErrors" class="card hidden" style="margin-top:1rem">
+        <summary><strong id="clientErrorsTitle">Fehlerberichte von Handys</strong></summary>
+        <p class="small muted">Programmfehler, die auf Handys aufgetreten sind – ohne Namen, Standorte oder Spieler-Links. Hilft beim Beheben; nach einem Neustart des Servers ist die Liste leer.</p>
+        <ul id="clientErrorList" class="list client-errors"></ul>
+        <button id="clearClientErrors" class="btn sm admin-only" type="button">Liste leeren</button>
+      </details>
     </section>
 
     <!-- Raumdetail -->
@@ -196,6 +207,8 @@
         </div>
       </div>
     </section>
+
+    <footer id="appFooter" class="small muted app-footer"></footer>
   </div>
 
   <div id="overlay" class="overlay hidden"></div>

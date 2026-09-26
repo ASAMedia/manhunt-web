@@ -84,7 +84,7 @@ export default async function features({ base, adminPass: PASS, supPass: SUP, ch
   check(adm.rounds.length === 1 && round.no === 1 && round.runners.map((r) => r.name).sort().join() === 'R1,R2' && round.pings.regular >= 1, 'Runde ausgewertet', round);
   check(!JSON.stringify(adm.rounds).includes('52.5'), 'Auswertung enthält keine Koordinaten');
   const csv = await req('GET', `/api/admin/rooms/${room.id}/export/verlauf.csv`, undefined, S);
-  check(csv.status === 200 && csv.ct.includes('text/csv') && csv.data.replace(/^﻿/, '').startsWith('Zeit;Ereignis'), 'Verlauf-CSV (Aufsicht)');
+  check(csv.status === 200 && csv.ct.includes('text/csv') && csv.data.replace(String.fromCharCode(0xfeff), '').startsWith('Zeit;Ereignis'), 'Verlauf-CSV (Aufsicht)');
   const csv2 = await req('GET', `/api/admin/rooms/${room.id}/export/auswertung.csv`, undefined, A);
   check(csv2.status === 200 && csv2.data.includes('Runde;Start;Ende') && csv2.data.includes('R1'), 'Auswertungs-CSV');
   check((await req('GET', `/api/admin/rooms/${room.id}/export/x.csv`, undefined, A)).status === 404, 'unbekannter Export = 404');

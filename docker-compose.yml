@@ -11,11 +11,26 @@
 #   autoupdate  holt neue Versionen automatisch, täglich um 4 Uhr nachts
 # Ohne Profil läuft nur die App auf http://127.0.0.1:3000 (z. B. hinter einem vorhandenen Reverse Proxy).
 
+# Logs aller Dienste begrenzen (max. 3 × 10 MB), damit sie die Platte nicht füllen
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   app:
     image: ${MANHUNT_IMAGE:-ghcr.io/asamedia/manhunt-web:latest}
     restart: unless-stopped
     init: true
+    logging: *logging
+    # Abschottung: nur /data ist beschreibbar, keine Sonderrechte
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Bitte ADMIN_PASSWORD in .env setzen}
       SUPERVISOR_PASSWORD: ${SUPERVISOR_PASSWORD:-}
@@ -26,6 +41,9 @@ services:
       AUTO_DELETE_DAYS: ${AUTO_DELETE_DAYS:-7}
       PRIVACY_CONTACT: ${PRIVACY_CONTACT:-}
       TILE_PROXY: ${TILE_PROXY:-1}
+      TILE_CACHE_MAX_MB: ${TILE_CACHE_MAX_MB:-1000}
+      # Die App ist nur über den Proxy (Caddy, Tunnel, eigener Reverse Proxy) erreichbar –
+      # die echte Adresse steht im letzten Eintrag von X-Forwarded-For
       TRUST_PROXY: "1"
     labels:
       # nur diesen Container automatisch aktualisieren (Profil autoupdate)
@@ -39,6 +57,7 @@ services:
     image: caddy:2-alpine
     profiles: ["caddy"]
     restart: unless-stopped
+    logging: *logging
     # Automatisches HTTPS (Let's Encrypt) für DOMAIN, leitet an die App weiter
     command: caddy reverse-proxy --from ${DOMAIN:-bitte-DOMAIN-in-env-setzen} --to app:3000
     ports:
@@ -54,16 +73,19 @@ services:
     image: cloudflare/cloudflared:latest
     profiles: ["tunnel"]
     restart: unless-stopped
+    logging: *logging
     command: tunnel --no-autoupdate --url http://app:3000
     depends_on:
       - app
 
   # Automatische Updates: gepflegter Nachfolger von Watchtower (das Original ist seit 12/2025 eingestellt).
   # Nachts, damit kein laufendes Spiel unterbrochen wird. Braucht Zugriff auf den Docker-Socket.
+  # Tipp: während der Klassenfahrt abschalten (autoupdate aus COMPOSE_PROFILES nehmen) – dann ändert sich nichts mehr.
   autoupdate:
     image: nickfedor/watchtower:latest
     profiles: ["autoupdate"]
     restart: unless-stopped
+    logging: *logging
     environment:
       WATCHTOWER_SCHEDULE: "0 0 4 * * *"   # Sekunde Minute Stunde … → täglich 4:00 Uhr
       WATCHTOWER_LABEL_ENABLE: "true"       # nur Container mit dem Label oben

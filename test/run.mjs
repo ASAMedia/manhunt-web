@@ -9,6 +9,7 @@ import basics from './basics.test.mjs';
 import features from './features.test.mjs';
 import extras from './extras.test.mjs';
 import autodelete from './autodelete.test.mjs';
+import golive from './golive.test.mjs';
 
 const r = results();
 const secret = () => crypto.randomBytes(9).toString('base64url');
@@ -25,10 +26,11 @@ const srv = await startServer({
   TILE_URL: `${tiles.base}/{z}/{x}/{y}.png`,
   TILE_PROXY: '1',
   MAP_CENTER: '52.517,13.3889',
+  TRUST_PROXY: '1', // wie in docker-compose.yml
 });
 
 const ctx = { base: srv.base, adminPass, supPass, check: r.check, section: r.section, tiles };
-for (const [name, suite] of [['Grundfunktionen', basics], ['Neue Funktionen', features], ['Blocks, Check, App, Karten', extras]]) {
+for (const [name, suite] of [['Grundfunktionen', basics], ['Neue Funktionen', features], ['Blocks, Check, App, Karten', extras], ['Vor dem Live-Gang', golive]]) {
   r.suite(name);
   try {
     await suite(ctx);

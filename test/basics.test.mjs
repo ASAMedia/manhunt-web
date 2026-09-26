@@ -25,8 +25,8 @@ export default async function basics({ base, adminPass: PASS, check, section }) 
   }
   check((await req('POST', `/api/join/${room.code}`, { name: 'anna' })).status === 409, 'doppelter Name = 409');
   check((await req('POST', `/api/join/${room.code}`, { name: '  <>  ' })).status === 400, 'Name nur aus <> = 400');
-  let st = (await req('GET', '/api/play/state', undefined, { token: tokens.Anna })).data;
-  check(st.me.name === 'Anna' && st.me.role === null && st.room.code === room.code, 'Spielerstatus Lobby');
+  const st = (await req('GET', '/api/play/state', undefined, { token: tokens.Anna })).data;
+  check(st.me.name === 'Anna' && st.me.role === null && st.room.code === undefined, 'Spielerstatus Lobby (ohne Raumcode)');
   check(st.lobby.length === 5, 'Lobby-Liste');
 
   section('Selbstverwaltung in der Lobby');
@@ -72,7 +72,7 @@ export default async function basics({ base, adminPass: PASS, check, section }) 
   pv = (await req('POST', '/api/play/sos', undefined, { token: tokens.Ben })).data;
   check(pv.me.emergency?.at && pv.me.emergency.ackAt === null, 'SOS ausgelöst');
   check((await req('POST', '/api/play/sos', undefined, { token: tokens.Ben })).status === 200, 'doppeltes SOS ok');
-  let alerts = (await req('GET', '/api/admin/alerts', undefined, { admin: true })).data.emergencies;
+  const alerts = (await req('GET', '/api/admin/alerts', undefined, { admin: true })).data.emergencies;
   check(alerts.length === 1 && alerts[0].name === 'Ben' && alerts[0].pos?.lat === 52.516, 'Admin-Alarmliste: 1 Notfall mit Standort', alerts);
   check((await req('GET', '/api/admin/alerts')).status === 401, 'Alarmliste nur für Admin');
   adm = (await req('GET', `/api/admin/rooms/${room.id}`, undefined, { admin: true })).data;

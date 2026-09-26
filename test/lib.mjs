@@ -40,6 +40,7 @@ export async function startServer(env) {
   }
   return {
     base,
+    pid: child.pid,
     output: () => output,
     stop: () => new Promise((resolve) => {
       if (child.exitCode !== null) return resolve();

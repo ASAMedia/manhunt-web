@@ -16,6 +16,43 @@ export async function api(method, url, body, headers = {}) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Fehlerberichte: Skriptfehler auf Handys gehen an den Server (Log + Liste im Admin-Bereich).
+// Ohne Namen, Standort oder Spieler-Token; höchstens 5 pro Seitenaufruf.
+// ---------------------------------------------------------------------------
+
+export const errorContext = { role: null }; // die Seiten tragen hier ihre Rolle ein
+let reportsLeft = 5;
+const stripOrigin = (s) => String(s || '').split(location.origin).join('');
+// harmlose Browser-Meldungen und Funklöcher sind keine Programmfehler
+const IGNORED = /ResizeObserver loop|^Script error\.?$|Failed to fetch|NetworkError|Load failed|network connection was lost|AbortError/i;
+
+function reportError(message, source, line, col, stack) {
+  if (!message || IGNORED.test(message) || reportsLeft <= 0) return;
+  reportsLeft--;
+  const body = {
+    message: String(message).slice(0, 300),
+    source: stripOrigin(source).slice(0, 120),
+    line, col,
+    stack: stripOrigin(stack).slice(0, 1000),
+    page: location.pathname,
+    role: errorContext.role,
+    lang: document.documentElement.lang,
+  };
+  fetch('/api/client-error', {
+    method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
+window.addEventListener('error', (e) => {
+  if (e.error || e.message) reportError(e.message, e.filename, e.lineno, e.colno, e.error?.stack);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason;
+  if (r?.status) return; // Antworten des Servers (z. B. „Das Spiel läuft nicht.“) sind kein Programmfehler
+  reportError(r?.message || String(r), '', null, null, r?.stack);
+});
+
 // DOM-Baukasten: Texte immer über textContent, nie als HTML
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -136,7 +173,8 @@ export const getConfig = () => (configPromise ??= api('GET', '/api/config'));
 export async function createMap(id) {
   const cfg = await getConfig();
   const map = L.map(id, { zoomControl: true, attributionControl: true }).setView(cfg.mapCenter, 14);
-  L.tileLayer(cfg.tileUrl, { attribution: cfg.tileAttribution, maxZoom: 19 }).addTo(map);
+  // ab Zoom 19 vergrößert Leaflet die Kacheln von Zoom 18 (mehr liefert der Kachel-Zwischenspeicher nicht)
+  L.tileLayer(cfg.tileUrl, { attribution: cfg.tileAttribution, maxZoom: 19, maxNativeZoom: 18 }).addTo(map);
   return map;
 }
 

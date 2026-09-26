@@ -1,8 +1,10 @@
 import {
   $, api, el, fmtCountdown, fmtAge, fmtTime, ROLE_LABEL, STATUS_LABEL, getConfig, createMap, labeledMarker, meetingMarker,
   cssVar, holdButton, isHolding, playSound, audioReady, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
-  drawZone,
+  drawZone, errorContext,
 } from './common.js';
+
+errorContext.role = 'admin';
 
 let cfg;
 let R = null;             // aktueller Raum (Admin-Sicht)
@@ -63,6 +65,7 @@ function swapIfChanged(container, ...nodes) {
 
 async function boot() {
   cfg = await getConfig();
+  $('#appFooter').textContent = `Manhunt ${cfg.version || ''}${cfg.build ? ` · Build ${cfg.build}` : ''}`;
   const s = await api('GET', '/api/admin/session');
   if (s.admin) { applyRole(s.role); route(); } else showLogin();
 }
@@ -134,7 +137,7 @@ async function pollAlerts() {
   alertTimer = setTimeout(pollAlerts, 4000);
 }
 
-const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds' };
+const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds', join: 'Neu im laufenden Spiel' };
 
 function renderAlertBar() {
   const bar = $('#alertBar');
@@ -198,7 +201,8 @@ function warnItem(w) {
         class: 'small',
         text: w.type === 'signal'
           ? (w.key ? `Letztes Signal ${fmtTime(w.since)} Uhr – Display aus, Akku leer oder Funkloch?` : 'Hat seit Spielstart noch nie gesendet')
-          : `Seit ${fmtTime(w.since)} Uhr außerhalb`,
+          : w.type === 'join' ? `Um ${fmtTime(w.since)} Uhr beigetreten und automatisch Jäger – kennst du das Gerät? Sonst entfernen.`
+            : `Seit ${fmtTime(w.since)} Uhr außerhalb`,
       })),
     el('div', { class: 'row' },
       w.pos ? el('button', { class: 'btn sm', type: 'button', onclick: () => focusAlert(w), text: 'Auf Karte' }) : null,
@@ -260,6 +264,8 @@ async function loadList() {
   try {
     const rooms = await api('GET', '/api/admin/rooms');
     $('#noRooms').classList.toggle('hidden', rooms.length > 0);
+    renderCopySelect(rooms);
+    loadClientErrors();
     swapIfChanged($('#roomGrid'), rooms.map((r) => el('button', {
       class: 'card room-card stack', type: 'button', onclick: () => { location.hash = `room=${r.id}`; },
     },
@@ -284,10 +290,69 @@ async function loadList() {
 $('#newRoomForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const room = await api('POST', '/api/admin/rooms', { name: $('#newRoomName').value });
+    const copyFrom = $('#copyFrom').value || undefined;
+    const room = await api('POST', '/api/admin/rooms', { name: $('#newRoomName').value, copyFrom });
     $('#newRoomName').value = '';
+    $('#copyFrom').value = '';
     location.hash = `room=${room.id}`;
   } catch (err) { handleError(err); }
+});
+
+// Auswahl „Einstellungen übernehmen von …“ – nur neu füllen, wenn sich die Räume geändert haben
+function renderCopySelect(rooms) {
+  const sel = $('#copyFrom');
+  if (document.activeElement === sel) return;
+  const current = sel.value;
+  const opts = [el('option', { value: '', text: 'Neue Einstellungen' }),
+    ...rooms.map((r) => el('option', { value: r.id, text: `Wie „${r.name}“` }))];
+  swapIfChanged(sel, opts);
+  sel.value = rooms.some((r) => r.id === current) ? current : '';
+}
+
+async function copyRoom() {
+  const name = prompt('Name des neuen Raums? Spielfeld, Treffpunkt, Regeln und alle Einstellungen werden übernommen – Geräte und Verlauf nicht.', `${R.name} (Kopie)`.slice(0, 24));
+  if (name === null) return;
+  try {
+    const room = await api('POST', '/api/admin/rooms', { name, copyFrom: roomId });
+    toast(`Raum „${room.name}“ angelegt`);
+    location.hash = `room=${room.id}`;
+  } catch (e) { handleError(e); }
+}
+
+// ---------------------------------------------------------------------------
+// Fehlerberichte von Handys
+// ---------------------------------------------------------------------------
+
+async function loadClientErrors() {
+  let list;
+  try { list = await api('GET', '/api/admin/client-errors'); } catch { return; }
+  const box = $('#clientErrors');
+  box.classList.toggle('hidden', !list.length);
+  const total = list.reduce((n, r) => n + r.count, 0);
+  $('#clientErrorsTitle').textContent = `Fehlerberichte von Handys (${total})`;
+  // aufgeklappte Details bleiben beim Aktualisieren offen
+  const ul = $('#clientErrorList');
+  const openKeys = new Set([...ul.querySelectorAll('details[open]')].map((d) => d.dataset.key));
+  const keyOf = (r) => `${r.message}|${r.source}|${r.line}|${r.agent}`;
+  swapIfChanged(ul, list.map((r) => el('li', { class: 'stack' },
+    el('div', {},
+      el('strong', { text: r.message }),
+      el('div', {
+        class: 'small muted',
+        text: [
+          `${fmtTime(r.lastAt)} Uhr${r.count > 1 ? ` · ${r.count}×` : ''}`,
+          r.agent, r.page, r.role && { hunter: 'Jäger', runner: 'Gejagt', lobby: 'Lobby', admin: 'Spielleitung' }[r.role],
+          r.source ? `${r.source}:${r.line ?? '?'}` : null,
+        ].filter(Boolean).join(' · '),
+      })),
+    r.stack ? el('details', { 'data-key': keyOf(r), open: openKeys.has(keyOf(r)) }, el('summary', { class: 'small', text: 'Details' }), el('pre', { class: 'small', text: r.stack })) : null)));
+}
+
+$('#clearClientErrors').addEventListener('click', async () => {
+  try {
+    await api('DELETE', '/api/admin/client-errors');
+    loadClientErrors();
+  } catch (e) { handleError(e); }
 });
 
 // ---------------------------------------------------------------------------
@@ -386,7 +451,8 @@ function renderControls() {
     items.push(el('span', { class: 'small muted', text: 'Als Aufsicht siehst du alles, bearbeitest Notfälle und sendest Nachrichten. Starten, Einstellen und Löschen macht die Spielleitung.' }));
   } else if (R.status === 'lobby') {
     items.push(b('Spiel starten', 'primary', () => {
-      if (confirm('Spiel jetzt starten? Alle Handys bekommen sofort Bescheid.')) act('POST', '/start');
+      const open = R.joinOpen ? '\n\nHinweis: Der Beitritt ist noch offen – wer jetzt noch mit dem Code beitritt, wird automatisch Jäger. Im Zweifel vorher „Beitritt schließen“.' : '';
+      if (confirm(`Spiel jetzt starten? Alle Handys bekommen sofort Bescheid.${open}`)) act('POST', '/start');
     }));
   }
   if (isAdmin() && R.status === 'running') {
@@ -400,6 +466,7 @@ function renderControls() {
   if (isAdmin() && R.status === 'ended') {
     items.push(b('Neue Runde (zurück zur Lobby)', 'primary', () => act('POST', '/lobby')));
   }
+  if (isAdmin()) items.push(b('Raum kopieren', '', copyRoom));
   // Löschen nur durch Gedrückthalten, damit es nicht aus Versehen passiert
   if (isAdmin()) items.push(holdButton({
     text: 'Raum löschen (gedrückt halten)', cls: 'danger', title: 'Raum mit allen Daten löschen – 2 Sekunden gedrückt halten',
@@ -526,6 +593,7 @@ function playerRow(p, t) {
   }
   if (p.outside) status.push(el('span', { class: 'badge danger', text: 'außerhalb' }));
   if (p.warnings?.some((w) => w.type === 'signal')) status.push(el('span', { class: 'badge warn', text: '⚠ kein Signal' }));
+  if (p.warnings?.some((w) => w.type === 'join' && !w.acked)) status.push(el('span', { class: 'badge warn', text: '⚠ neu im Spiel' }));
   if (p.geoError) status.push(el('span', { class: 'badge warn', text: p.geoError }));
   if (p.blockArmed) status.push(el('span', { class: 'badge', text: '🛡 blockt nächsten Ping' }));
   // Handy-Check: in der Lobby immer, im Spiel nur wenn etwas fehlt
@@ -577,8 +645,9 @@ function showPlayerDialog(pid) {
   if (!p) return;
   const t = now();
   const running = R.status === 'running';
+  // Den Wiederbeitritts-Link (= Zugang als dieses Gerät) bekommt nur die Spielleitung, nicht die Aufsicht
   const qrBox = el('div', { class: 'dialog-qr stack hidden' },
-    el('img', { src: qrSrc(baseUrl() + p.rejoinPath), alt: `Wiederbeitritts-QR für ${p.name}` }),
+    p.rejoinPath ? el('img', { src: qrSrc(baseUrl() + p.rejoinPath), alt: `Wiederbeitritts-QR für ${p.name}` }) : null,
     el('p', { class: 'small muted', text: `Nur für ${p.name}! Mit diesem Code spielt ein anderes Handy als dieses Gerät weiter, z. B. nach leerem Akku.` }));
   const b = (text, onclick, cls = '') => el('button', { class: `btn ${cls}`, type: 'button', onclick, text });
   const status = p.emergency ? 'NOTFALL gemeldet'
@@ -609,8 +678,8 @@ function showPlayerDialog(pid) {
         $('#adminMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
       }) : null,
       p.pos ? el('a', { class: 'btn', href: routeUrl(p.pos.lat, p.pos.lng), target: '_blank', rel: 'noopener', text: 'Route ↗' }) : null,
-      b('Wiederbeitritts-QR', () => qrBox.classList.toggle('hidden')),
-      p.bot ? el('a', { class: 'btn', href: p.rejoinPath, target: '_blank', rel: 'noopener', text: 'Als dieses Gerät ansehen ↗' }) : null,
+      p.rejoinPath ? b('Wiederbeitritts-QR', () => qrBox.classList.toggle('hidden')) : null,
+      p.bot && p.rejoinPath ? el('a', { class: 'btn', href: p.rejoinPath, target: '_blank', rel: 'noopener', text: 'Als dieses Gerät ansehen ↗' }) : null,
       ...(p.warnings || []).filter((w) => !w.acked).map((w) => b(`${WARN_TEXT[w.type]} quittieren`, async () => {
         await ackWarning({ roomId, playerId: p.id, type: w.type });
         closeOverlay();

@@ -7,7 +7,12 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY server.js ./
+COPY src ./src
 COPY public ./public
+
+# Wird vom CI-Build gesetzt (Commit + Datum) und im Admin-Bereich angezeigt
+ARG APP_BUILD=""
+ENV APP_BUILD=$APP_BUILD
 
 RUN mkdir -p /data && chown node:node /data
 USER node
