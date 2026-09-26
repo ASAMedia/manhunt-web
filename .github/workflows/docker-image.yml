@@ -10,6 +10,8 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Alle Actions sind auf feste Commits gepinnt (Kommentar = Version) – ein manipuliertes Versions-Tag
+# kann so nicht unbemerkt in den Build gelangen. Aktualisieren: neuen Commit-Hash der Version eintragen.
 permissions:
   contents: read
 
@@ -17,13 +19,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm test
+      # bekannte Sicherheitslücken in den Abhängigkeiten, die im Image landen
+      - run: npm audit --omit=dev --audit-level=high
 
   image:
     needs: test
@@ -33,23 +38,27 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Registry-Namen müssen kleingeschrieben sein (ASAMedia → asamedia)
       - name: Image-Namen festlegen
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/manhunt-web" >> "$GITHUB_ENV"
 
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # erscheint im Admin-Bereich unten als Versionsangabe
+      - name: Build-Kennung (Commit + Datum)
+        run: echo "APP_BUILD=${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.IMAGE }}
           tags: |
@@ -58,12 +67,31 @@ jobs:
             type=sha,format=short
 
       # amd64 für normale Server, arm64 z. B. für Raspberry Pi
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: APP_BUILD=${{ env.APP_BUILD }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Sicherheits-Scan des fertigen (öffentlichen) Images – nur als Bericht im Log, bricht nichts ab.
+  # Eigener Job ohne Schreibrechte; die Action ist auf einen festen Commit gepinnt (v0.36.0).
+  scan:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Image-Namen festlegen
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/manhunt-web:sha-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - name: Image auf bekannte Lücken prüfen (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
