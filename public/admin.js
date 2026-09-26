@@ -1,0 +1,865 @@
+import {
+  $, api, el, fmtCountdown, fmtAge, fmtTime, ROLE_LABEL, STATUS_LABEL, getConfig, createMap, labeledMarker, meetingMarker,
+  cssVar, holdButton, isHolding, playSound, audioReady, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
+  drawZone,
+} from './common.js';
+
+let cfg;
+let R = null;             // aktueller Raum (Admin-Sicht)
+let roomId = null;
+let clockOffset = 0;
+let pollTimer = null;
+let loggedIn = false;
+let role = 'admin';       // 'admin' = Spielleitung, 'supervisor' = Aufsicht (nur ansehen, Notfälle, Nachrichten)
+const isAdmin = () => role === 'admin';
+
+function applyRole(r) {
+  role = r || 'admin';
+  document.body.classList.toggle('role-supervisor', role === 'supervisor');
+}
+
+let map = null;
+const layers = {};
+let picking = null;       // 'zone' | 'meeting' | null – nächster Klick auf die Karte setzt diesen Punkt
+let pendingZone;          // {lat,lng} | null – Mitte des Spielfelds im Formular
+let pendingMeeting;       // {lat,lng} | null – Treffpunkt im Formular
+let settingsDirty = false;
+let fitted = false;
+let pendingFocus = null;  // nach Raumwechsel auf diesen Punkt zoomen (Notfall „Auf Karte“)
+
+let alerts = { emergencies: [], warnings: [] }; // offene Notfälle + Warnungen aller Räume
+let alertTimer = null;
+let lastAlarmAt = 0;
+let lastWarnAt = 0;
+const knownAlerts = new Set();
+
+const now = () => Date.now() + clockOffset;
+const baseUrl = () => cfg.publicUrl || location.origin;
+const fmtDate = (ts) => new Date(ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+
+// ---------------------------------------------------------------------------
+// Grundgerüst
+// ---------------------------------------------------------------------------
+
+function toast(text, isError = false) {
+  const t = $('#toast');
+  t.textContent = text;
+  t.className = `toast${isError ? ' error' : ''}`;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.add('hidden'), isError ? 6000 : 3000);
+}
+
+function show(view) {
+  for (const v of ['loginView', 'listView', 'roomView']) $(`#${v}`).classList.toggle('hidden', v !== view);
+  $('#adminWrap').classList.toggle('hidden', view === 'loginView');
+}
+
+// Nur neu aufbauen, wenn sich etwas geändert hat – sonst gehen Klicks während des Neuaufbaus verloren
+function swapIfChanged(container, ...nodes) {
+  const fresh = el('div', {}, ...nodes);
+  if (isHolding() || container.innerHTML === fresh.innerHTML) return;
+  container.replaceChildren(...fresh.childNodes);
+}
+
+async function boot() {
+  cfg = await getConfig();
+  const s = await api('GET', '/api/admin/session');
+  if (s.admin) { applyRole(s.role); route(); } else showLogin();
+}
+
+function showLogin() {
+  loggedIn = false;
+  clearTimeout(pollTimer);
+  clearTimeout(alertTimer);
+  show('loginView');
+  $('#password').focus();
+}
+
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#loginErr').textContent = '';
+  try {
+    const s = await api('POST', '/api/admin/login', { password: $('#password').value });
+    $('#password').value = '';
+    applyRole(s.role);
+    route();
+  } catch (err) {
+    $('#loginErr').textContent = err.message;
+  }
+});
+
+$('#logoutBtn').addEventListener('click', async () => {
+  await api('POST', '/api/admin/logout').catch(() => {});
+  showLogin();
+});
+
+window.addEventListener('hashchange', route);
+
+function route() {
+  if (!loggedIn) {
+    loggedIn = true;
+    pollAlerts();
+  }
+  clearTimeout(pollTimer);
+  const m = location.hash.match(/^#room=([\w-]+)$/);
+  if (m) openRoom(m[1]);
+  else openList();
+}
+
+function handleError(e) {
+  if (e.status === 401) return showLogin();
+  toast(e.message, true);
+}
+
+function updateTitle() {
+  const base = roomId && R ? `Spielleitung – ${R.name}` : 'Manhunt – Spielleitung';
+  const sos = alerts.emergencies.some((a) => !a.ackAt);
+  const warn = alerts.warnings.some((w) => !w.acked);
+  document.title = sos ? `🚨 NOTFALL · ${base}` : warn ? `⚠ Warnung · ${base}` : base;
+}
+
+// ---------------------------------------------------------------------------
+// Notfälle (alle Räume)
+// ---------------------------------------------------------------------------
+
+async function pollAlerts() {
+  clearTimeout(alertTimer);
+  if (!loggedIn) return;
+  try {
+    alerts = await api('GET', '/api/admin/alerts');
+    renderAlertBar();
+  } catch (e) {
+    if (e.status === 401) return showLogin();
+  }
+  alertTimer = setTimeout(pollAlerts, 4000);
+}
+
+const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds' };
+
+function renderAlertBar() {
+  const bar = $('#alertBar');
+  const { emergencies } = alerts;
+  const warnings = alerts.warnings.filter((w) => !w.acked); // quittierte Warnungen nur noch in der Geräte-Liste
+  const unacked = emergencies.filter((a) => !a.ackAt);
+  bar.classList.toggle('hidden', !emergencies.length && !warnings.length);
+
+  // Alarmton bei neuem Notfall sofort, danach alle 10 s, bis er als „gesehen“ markiert ist.
+  // Warnungen: leiserer Ton bei neuer Warnung, danach alle 30 s, bis sie quittiert sind.
+  const keys = [...emergencies.map((a) => a.id), ...warnings.map((w) => `${w.playerId}.${w.type}.${w.key}`)];
+  const isNew = keys.some((k) => !knownAlerts.has(k));
+  for (const k of keys) knownAlerts.add(k);
+  const t = Date.now();
+  if (unacked.length && (isNew || t - lastAlarmAt > 10000)) {
+    lastAlarmAt = t;
+    playSound(SOUNDS.alarm);
+  } else if (!unacked.length && warnings.length && (isNew || t - lastWarnAt > 30000)) {
+    lastWarnAt = t;
+    playSound(SOUNDS.warn);
+  }
+  updateTitle();
+
+  // Warnungen pro Raum und Art bündeln – sonst füllen z. B. zu Spielbeginn viele „kein Signal“ den Bildschirm
+  const groups = new Map();
+  for (const w of warnings) {
+    const k = `${w.roomId}|${w.type}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(w);
+  }
+  const warnItems = [...groups.values()].map((list) => (list.length === 1 ? warnItem(list[0]) : warnGroupItem(list)));
+
+  swapIfChanged(bar, emergencies.map((a) => el('div', { class: `alert-item sos ${a.ackAt ? 'acked' : 'unacked'}` },
+    el('div', {},
+      el('strong', { text: `🚨 NOTFALL: ${a.name}` }),
+      el('span', { text: ` · ${a.roomName} · seit ${fmtTime(a.at)} Uhr${a.ackAt ? ` · gesehen ${fmtTime(a.ackAt)}` : ''}` }),
+      el('div', {
+        class: 'small',
+        text: a.pos ? `Standort von ${fmtTime(a.pos.t)} Uhr, ±${a.pos.acc ?? '?'} m` : 'Kein Standort bekannt – anrufen!',
+      })),
+    el('div', { class: 'row' },
+      a.pos ? el('button', { class: 'btn sm', type: 'button', onclick: () => focusAlert(a), text: 'Auf Karte' }) : null,
+      a.pos ? el('a', { class: 'btn sm', href: routeUrl(a.pos.lat, a.pos.lng), target: '_blank', rel: 'noopener', text: 'Route ↗' }) : null,
+      a.ackAt ? null : el('button', { class: 'btn sm', type: 'button', onclick: () => emergencyAction(a, { ack: true }), text: 'Gesehen' }),
+      el('button', {
+        class: 'btn sm', type: 'button', text: 'Erledigt',
+        onclick: () => { if (confirm(`Notfall von ${a.name} als erledigt markieren?`)) emergencyAction(a, { resolve: true }); },
+      })))),
+  warnItems,
+  (unacked.length || warnings.length) && !audioReady()
+    ? el('div', { class: 'alert-item info small', text: 'Alarmton ist blockiert – einmal irgendwo auf die Seite klicken.' })
+    : null);
+}
+
+function warnItem(w) {
+  return el('div', { class: 'alert-item warn' },
+    el('div', {},
+      el('strong', { text: `⚠ ${WARN_TEXT[w.type]}: ${w.name}` }),
+      el('span', { text: ` · ${w.roomName}` }),
+      el('div', {
+        class: 'small',
+        text: w.type === 'signal'
+          ? (w.key ? `Letztes Signal ${fmtTime(w.since)} Uhr – Display aus, Akku leer oder Funkloch?` : 'Hat seit Spielstart noch nie gesendet')
+          : `Seit ${fmtTime(w.since)} Uhr außerhalb`,
+      })),
+    el('div', { class: 'row' },
+      w.pos ? el('button', { class: 'btn sm', type: 'button', onclick: () => focusAlert(w), text: 'Auf Karte' }) : null,
+      el('button', { class: 'btn sm', type: 'button', onclick: () => ackWarnings([w]), text: 'OK', title: 'Quittieren – meldet sich erst wieder bei einem neuen Vorfall' })));
+}
+
+function warnGroupItem(list) {
+  const { roomId: rid, roomName, type } = list[0];
+  return el('div', { class: 'alert-item warn' },
+    el('div', {},
+      el('strong', { text: `⚠ ${WARN_TEXT[type]}: ${list.length} Geräte` }),
+      el('span', { text: ` · ${roomName}` }),
+      el('div', { class: 'small', text: list.map((w) => w.name).join(', ') })),
+    el('div', { class: 'row' },
+      rid !== roomId ? el('button', { class: 'btn sm', type: 'button', onclick: () => { location.hash = `room=${rid}`; }, text: 'Zum Raum' }) : null,
+      el('button', { class: 'btn sm', type: 'button', onclick: () => ackWarnings(list), text: 'Alle OK', title: 'Alle quittieren – melden sich erst bei einem neuen Vorfall wieder' })));
+}
+
+async function ackWarnings(list) {
+  try {
+    await Promise.all(list.map((w) => api('POST', `/api/admin/rooms/${w.roomId}/players/${w.playerId}/ack`, { type: w.type })));
+    await pollAlerts();
+    if (list.some((w) => w.roomId === roomId)) loadRoom();
+  } catch (e) { handleError(e); }
+}
+const ackWarning = (w) => ackWarnings([w]);
+
+async function emergencyAction(a, body) {
+  try {
+    await api('PATCH', `/api/admin/rooms/${a.roomId}/emergencies/${a.id}`, body);
+    await pollAlerts();
+    if (roomId === a.roomId) loadRoom();
+  } catch (e) { handleError(e); }
+}
+
+function focusAlert(a) {
+  if (roomId === a.roomId && map) {
+    map.setView([a.pos.lat, a.pos.lng], 17);
+    $('#adminMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    pendingFocus = [a.pos.lat, a.pos.lng];
+    location.hash = `room=${a.roomId}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Raumliste
+// ---------------------------------------------------------------------------
+
+async function openList() {
+  roomId = null;
+  show('listView');
+  updateTitle();
+  await loadList();
+}
+
+async function loadList() {
+  clearTimeout(pollTimer);
+  try {
+    const rooms = await api('GET', '/api/admin/rooms');
+    $('#noRooms').classList.toggle('hidden', rooms.length > 0);
+    swapIfChanged($('#roomGrid'), rooms.map((r) => el('button', {
+      class: 'card room-card stack', type: 'button', onclick: () => { location.hash = `room=${r.id}`; },
+    },
+    el('div', { class: 'row', style: 'justify-content:space-between' },
+      el('strong', { text: r.name }),
+      el('span', { class: 'row' },
+        r.emergencies ? el('span', { class: 'badge danger', text: '🚨 Notfall' }) : null,
+        r.warnings ? el('span', { class: 'badge warn', text: `⚠ ${r.warnings}` }) : null,
+        r.bots ? el('span', { class: 'badge', text: 'Probespiel' }) : null,
+        el('span', { class: `badge ${r.status === 'running' ? 'running' : ''}`, text: STATUS_LABEL[r.status] }))),
+    el('div', { class: 'small muted' },
+      'Code ', el('span', { class: 'code', text: r.code }), ` · ${r.players} Geräte · ${r.runners} Gejagte · ${r.hunters} Jäger`),
+    el('div', { class: 'small muted', text: `Erstellt ${fmtDate(r.createdAt)}${r.joinOpen ? '' : ' · Beitritt geschlossen'}` }),
+    r.autoDeleteAt ? el('div', { class: 'small muted', text: `Wird am ${fmtDate(r.autoDeleteAt)} automatisch gelöscht` }) : null,
+    )));
+  } catch (e) {
+    return handleError(e);
+  }
+  if (!roomId) pollTimer = setTimeout(loadList, 5000);
+}
+
+$('#newRoomForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const room = await api('POST', '/api/admin/rooms', { name: $('#newRoomName').value });
+    $('#newRoomName').value = '';
+    location.hash = `room=${room.id}`;
+  } catch (err) { handleError(err); }
+});
+
+// ---------------------------------------------------------------------------
+// Raumdetail
+// ---------------------------------------------------------------------------
+
+async function openRoom(id) {
+  const switched = id !== roomId;
+  roomId = id;
+  if (switched) {
+    R = null;
+    fitted = false;
+    settingsDirty = false;
+    pendingZone = undefined;
+    pendingMeeting = undefined;
+    setPicking(null);
+  }
+  show('roomView');
+  if (!map) {
+    map = await createMap('adminMap');
+    for (const k of ['zone', 'preview', 'meeting', 'pings', 'players']) layers[k] = L.layerGroup().addTo(map);
+    map.on('click', onMapClick);
+  }
+  map.invalidateSize();
+  await loadRoom();
+}
+
+async function loadRoom() {
+  clearTimeout(pollTimer);
+  const id = roomId;
+  try {
+    const room = await api('GET', `/api/admin/rooms/${id}`);
+    if (id !== roomId) return;
+    setRoom(room);
+  } catch (e) {
+    if (e.status === 404) { toast('Raum nicht gefunden', true); location.hash = ''; return; }
+    handleError(e);
+  }
+  if (roomId === id) pollTimer = setTimeout(loadRoom, 3000);
+}
+
+function setRoom(room) {
+  R = room;
+  clockOffset = room.serverTime - Date.now();
+  renderRoom();
+}
+
+// Aktion ausführen und Raum mit der Antwort neu zeichnen
+async function act(method, path, body) {
+  try {
+    setRoom(await api(method, `/api/admin/rooms/${roomId}${path}`, body));
+    return true;
+  } catch (e) {
+    handleError(e);
+    return false;
+  }
+}
+
+function renderRoom() {
+  $('#rName').textContent = R.name;
+  updateTitle();
+  const st = $('#rStatus');
+  st.className = `badge ${R.status === 'running' ? 'running' : ''}`;
+  st.textContent = STATUS_LABEL[R.status];
+  renderTimers();
+  renderControls();
+  renderInvite();
+  renderPlayers();
+  renderSettings();
+  renderMessage();
+  renderRounds();
+  renderEvents();
+  renderMap();
+}
+
+function renderTimers() {
+  if (!R || $('#roomView').classList.contains('hidden')) return;
+  const t = now();
+  const items = [];
+  const timer = (label, value) => el('div', { class: 'timer' }, el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }));
+  if (R.status === 'running') {
+    if (t < R.huntStartsAt) items.push(timer('Vorsprung', fmtCountdown(R.huntStartsAt - t)));
+    else items.push(timer('Nächster Ping', fmtCountdown(R.nextPingAt - t)));
+    items.push(timer('Spielende', fmtCountdown(R.endsAt - t)));
+    items.push(timer('Gejagte frei', String(R.runners)));
+    items.push(timer('Extra-Pings übrig', String(R.extraPingsLeft)));
+  }
+  $('#rTimers').replaceChildren(...items);
+}
+setInterval(renderTimers, 1000);
+
+function renderControls() {
+  const b = (text, cls, onclick) => el('button', { class: `btn ${cls}`, type: 'button', onclick, text });
+  const items = [];
+  if (!isAdmin()) {
+    items.push(el('span', { class: 'small muted', text: 'Als Aufsicht siehst du alles, bearbeitest Notfälle und sendest Nachrichten. Starten, Einstellen und Löschen macht die Spielleitung.' }));
+  } else if (R.status === 'lobby') {
+    items.push(b('Spiel starten', 'primary', () => {
+      if (confirm('Spiel jetzt starten? Alle Handys bekommen sofort Bescheid.')) act('POST', '/start');
+    }));
+  }
+  if (isAdmin() && R.status === 'running') {
+    items.push(b('Sofort-Ping', 'primary', () => {
+      if (confirm('Jetzt einen Ping an alle Jäger senden? (zählt nicht als Extra-Ping)')) act('POST', '/ping');
+    }));
+    items.push(b('Spiel beenden', 'danger', () => {
+      if (confirm('Spiel wirklich beenden?')) act('POST', '/end');
+    }));
+  }
+  if (isAdmin() && R.status === 'ended') {
+    items.push(b('Neue Runde (zurück zur Lobby)', 'primary', () => act('POST', '/lobby')));
+  }
+  // Löschen nur durch Gedrückthalten, damit es nicht aus Versehen passiert
+  if (isAdmin()) items.push(holdButton({
+    text: 'Raum löschen (gedrückt halten)', cls: 'danger', title: 'Raum mit allen Daten löschen – 2 Sekunden gedrückt halten',
+    onConfirm: async () => {
+      try {
+        await api('DELETE', `/api/admin/rooms/${roomId}`);
+        toast(`Raum „${R.name}“ gelöscht`);
+        location.hash = '';
+      } catch (e) { handleError(e); }
+    },
+  }));
+  swapIfChanged($('#controls'), items);
+
+  let result = null;
+  if (R.status === 'ended' && R.result) result = el('div', { class: 'alert result', text: R.result.reason });
+  else if (R.status === 'lobby' && isAdmin()) result = el('p', { class: 'small muted', text: 'Geräte beitreten lassen, Rollen setzen oder auslosen, Spielfeld und Treffpunkt festlegen – dann starten.' });
+  swapIfChanged($('#result'), result);
+
+  $('#autoDel').textContent = R.autoDeleteAt
+    ? `Wird am ${fmtDate(R.autoDeleteAt)} automatisch gelöscht (${cfg.autoDeleteDays} Tage nach der letzten Aktivität).`
+    : cfg.autoDeleteDays && R.status === 'running' ? 'Laufende Spiele werden nicht automatisch gelöscht.' : '';
+}
+
+let lastQrUrl = '';
+function renderInvite() {
+  const url = `${baseUrl()}/j/${R.code}`;
+  $('#rCode').textContent = R.code;
+  $('#joinUrl').textContent = url;
+  if (url !== lastQrUrl) {
+    lastQrUrl = url;
+    $('#qr').src = qrSrc(url);
+  }
+  $('#joinToggle').textContent = R.joinOpen ? 'Beitritt schließen' : 'Beitritt öffnen';
+
+  const u = new URL(baseUrl());
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
+  let warn = null;
+  if (local) warn = 'Du bist über localhost verbunden – dieser QR-Code funktioniert nicht auf Handys. Öffne die Spielleitung über die öffentliche https://-Adresse (Tunnel/Domain).';
+  else if (u.protocol !== 'https:') warn = 'Achtung: Ohne https:// können die Handys ihren Standort nicht senden.';
+  $('#urlWarn').replaceChildren(...(warn ? [el('div', { class: 'alert', text: warn })] : []));
+}
+
+$('#copyUrl').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('#joinUrl').textContent); toast('Link kopiert'); } catch { toast('Kopieren nicht möglich', true); }
+});
+$('#joinToggle').addEventListener('click', () => act('PATCH', '', { joinOpen: !R.joinOpen }));
+$('#renameRoom').addEventListener('click', () => {
+  const name = prompt('Neuer Raumname:', R.name);
+  if (name) act('PATCH', '', { name });
+});
+
+const closeOverlay = () => $('#overlay').classList.add('hidden');
+
+function openOverlay(card) {
+  const ov = $('#overlay');
+  ov.replaceChildren(card);
+  ov.onclick = (e) => { if (e.target === ov) closeOverlay(); };
+  ov.classList.remove('hidden');
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay(); });
+
+const qrSrc = (url) => `/api/admin/qr.svg?text=${encodeURIComponent(url)}`;
+
+function showJoinQr() {
+  const url = `${baseUrl()}/j/${R.code}`;
+  openOverlay(el('div', { class: 'card stack qr-full' },
+    el('h2', { text: R.name }),
+    el('img', { src: qrSrc(url), alt: 'QR-Code zum Beitreten' }),
+    el('div', {}, 'Code ', el('span', { class: 'big-code', text: R.code })),
+    el('p', { class: 'muted', text: 'QR-Code scannen oder Code auf der Startseite eingeben, Namen eingeben, fertig.' }),
+    el('div', { class: 'join-url', text: url }),
+    el('button', { class: 'btn primary', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
+}
+$('#qrFull').addEventListener('click', showJoinQr);
+$('#qr').addEventListener('click', showJoinQr);
+
+// --- Geräte-Tabelle ---------------------------------------------------------
+
+const ROLE_ORDER = { runner: 0, hunter: 1, null: 2 };
+
+function renderPlayers() {
+  const players = [...R.players].sort((a, b) => (b.emergency - a.emergency)
+    || (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || a.name.localeCompare(b.name, 'de'));
+  $('#pTitle').textContent = `Geräte (${players.length})`;
+  $('#drawN').max = Math.max(1, players.length - 1);
+  $('#drawForm').classList.toggle('hidden', R.status !== 'lobby');
+  // Nicht neu zeichnen, während eine Rollen-Auswahl offen ist
+  if ($('#pBody').contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+  const t = now();
+  $('#pBody').replaceChildren(...players.map((p) => playerRow(p, t)));
+  if (!players.length) $('#pBody').append(el('tr', {}, el('td', { colspan: 5, class: 'muted', text: 'Noch niemand beigetreten.' })));
+}
+
+const markCaught = (p) => {
+  if (confirm(`${p.name} als gefangen markieren? (wird dann Jäger)`)) act('PATCH', `/players/${p.id}`, { caught: true });
+};
+const releaseCaught = (p) => act('PATCH', `/players/${p.id}`, { caught: false });
+
+function playerRow(p, t) {
+  const stale = !p.lastSeen || t - p.lastSeen > 60000;
+  const running = R.status === 'running';
+
+  const roleSel = el('select', {
+    'aria-label': `Rolle von ${p.name}`,
+    onchange: (e) => {
+      e.target.blur(); // sonst bleibt die Tabelle eingefroren (siehe renderPlayers)
+      act('PATCH', `/players/${p.id}`, { role: e.target.value || null });
+    },
+  },
+  running && p.role ? null : el('option', { value: '', text: '– keine –' }),
+  el('option', { value: 'runner', text: ROLE_LABEL.runner }),
+  el('option', { value: 'hunter', text: ROLE_LABEL.hunter }));
+  roleSel.value = p.role || '';
+  // Aufsicht sieht die Rolle nur als Text
+  const roleCell = isAdmin() ? roleSel : el('span', { class: `badge ${p.role || ''}`, text: p.role ? ROLE_LABEL[p.role] : '–' });
+
+  const status = [];
+  if (p.emergency) status.push(el('span', { class: 'badge danger', text: '🚨 NOTFALL' }));
+  if (p.bot) status.push(el('span', { class: 'badge', text: 'Test' }));
+  if (p.caughtAt) status.push(el('span', { class: 'badge caught', text: `gefangen ${fmtTime(p.caughtAt)}` }));
+  else if (running && p.role === 'runner') status.push(el('span', { class: 'badge runner', text: 'frei' }));
+  if (running && p.role === 'runner' && p.transport) {
+    status.push(el('span', { class: 'badge', text: `${TRANSPORT_ICON[p.transport.mode]} ${TRANSPORT[p.transport.mode]} ${fmtTime(p.transport.at)}` }));
+  }
+  if (p.outside) status.push(el('span', { class: 'badge danger', text: 'außerhalb' }));
+  if (p.warnings?.some((w) => w.type === 'signal')) status.push(el('span', { class: 'badge warn', text: '⚠ kein Signal' }));
+  if (p.geoError) status.push(el('span', { class: 'badge warn', text: p.geoError }));
+
+  const btn = (text, onclick, title) => el('button', { class: 'btn sm', type: 'button', onclick, text, title });
+  const actions = [];
+  if (isAdmin() && running && p.role === 'runner') actions.push(btn('Gefangen', () => markCaught(p)));
+  if (isAdmin() && running && p.caughtAt) actions.push(btn('Zurück', () => releaseCaught(p), 'Zurück zu Gejagt'));
+  actions.push(btn('⋯', () => showPlayerDialog(p.id), 'Weitere Aktionen'));
+
+  return el('tr', { class: stale ? 'stale' : '' },
+    el('td', { class: 'name', title: p.name }, el('strong', { text: p.name })),
+    el('td', { class: 'role' }, roleCell),
+    el('td', { class: 'status' }, el('div', { class: 'row' }, status)),
+    el('td', { class: 'seen small' },
+      el('div', { class: 'age', text: signalText(p, t) }),
+      el('div', { class: 'batt', text: batteryText(p) })),
+    el('td', { class: 'actions' }, actions));
+}
+
+function signalText(p, t) {
+  if (!p.lastSeen) return 'noch nie';
+  return `${fmtAge(t - p.lastSeen).replace('vor ', '')}${p.pos?.acc != null ? ` · ±${p.pos.acc} m` : ''}`;
+}
+
+const batteryText = (p) => (p.battery != null ? `Akku ${Math.round(p.battery * 100)} %${p.charging ? ' ⚡' : ''}` : 'Akku –');
+
+// Geräte-Menü: seltenere Aktionen, damit die Tabelle schmal bleibt
+function showPlayerDialog(pid) {
+  const p = R.players.find((x) => x.id === pid);
+  if (!p) return;
+  const t = now();
+  const running = R.status === 'running';
+  const qrBox = el('div', { class: 'dialog-qr stack hidden' },
+    el('img', { src: qrSrc(baseUrl() + p.rejoinPath), alt: `Wiederbeitritts-QR für ${p.name}` }),
+    el('p', { class: 'small muted', text: `Nur für ${p.name}! Mit diesem Code spielt ein anderes Handy als dieses Gerät weiter, z. B. nach leerem Akku.` }));
+  const b = (text, onclick, cls = '') => el('button', { class: `btn ${cls}`, type: 'button', onclick, text });
+  const status = p.emergency ? 'NOTFALL gemeldet'
+    : p.caughtAt ? `gefangen um ${fmtTime(p.caughtAt)}` : p.outside ? 'außerhalb des Spielfelds' : 'im Spiel';
+  const transport = p.transport ? `${TRANSPORT_ICON[p.transport.mode]} ${TRANSPORT[p.transport.mode]} seit ${fmtTime(p.transport.at)} Uhr` : null;
+
+  openOverlay(el('div', { class: 'card stack' },
+    el('div', { class: 'row', style: 'justify-content:space-between' },
+      el('h2', { style: 'margin:0', text: p.name }),
+      el('span', { class: `badge ${p.role || ''}`, text: p.role ? ROLE_LABEL[p.role] : 'keine Rolle' })),
+    el('dl', { class: 'player-info' },
+      el('dt', { text: 'Status' }), el('dd', { text: status }),
+      el('dt', { text: 'Letztes Signal' }), el('dd', { text: signalText(p, t) }),
+      el('dt', { text: 'Akku' }), el('dd', { text: batteryText(p).replace('Akku ', '') }),
+      el('dt', { text: 'Beigetreten' }), el('dd', { text: `${fmtTime(p.joinedAt)} Uhr${p.bot ? ' (Test-Gerät)' : ''}` }),
+      transport ? el('dt', { text: 'Verkehrsmittel' }) : null, transport ? el('dd', { text: transport }) : null,
+      p.geoError ? el('dt', { text: 'Problem' }) : null, p.geoError ? el('dd', { text: p.geoError }) : null),
+    el('div', { class: 'dialog-actions' },
+      p.pos ? b('Auf Karte zeigen', () => {
+        closeOverlay();
+        map.setView([p.pos.lat, p.pos.lng], 17);
+        $('#adminMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }) : null,
+      p.pos ? el('a', { class: 'btn', href: routeUrl(p.pos.lat, p.pos.lng), target: '_blank', rel: 'noopener', text: 'Route ↗' }) : null,
+      b('Wiederbeitritts-QR', () => qrBox.classList.toggle('hidden')),
+      p.bot ? el('a', { class: 'btn', href: p.rejoinPath, target: '_blank', rel: 'noopener', text: 'Als dieses Gerät ansehen ↗' }) : null,
+      ...(p.warnings || []).filter((w) => !w.acked).map((w) => b(`${WARN_TEXT[w.type]} quittieren`, async () => {
+        await ackWarning({ roomId, playerId: p.id, type: w.type });
+        closeOverlay();
+      })),
+      isAdmin() ? b('Umbenennen', () => {
+        const name = prompt('Neuer Name:', p.name);
+        if (name) { closeOverlay(); act('PATCH', `/players/${p.id}`, { name }); }
+      }) : null,
+      isAdmin() && running && p.role === 'runner' ? b('Als gefangen markieren', () => { closeOverlay(); markCaught(p); }) : null,
+      isAdmin() && running && p.caughtAt ? b('Zurück zu Gejagt', () => { closeOverlay(); releaseCaught(p); }) : null),
+    qrBox,
+    // Entfernen nur durch Gedrückthalten, damit es nicht aus Versehen passiert
+    isAdmin() ? holdButton({
+      text: 'Aus dem Raum entfernen (gedrückt halten)', cls: 'danger',
+      title: `${p.name} entfernen – 2 Sekunden gedrückt halten`,
+      onConfirm: () => { closeOverlay(); act('DELETE', `/players/${p.id}`); },
+    }) : null,
+    el('button', { class: 'btn primary', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
+}
+
+$('#drawForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const n = Number($('#drawN').value);
+  const assigned = R.players.some((p) => p.role);
+  if (assigned && !confirm('Rollen neu auslosen? Bisherige Rollen werden überschrieben.')) return;
+  act('POST', '/draw', { runners: n });
+});
+
+// --- Einstellungen ------------------------------------------------------------
+
+const form = $('#settingsForm');
+
+function renderSettings() {
+  if (settingsDirty) return;
+  const s = R.settings;
+  form.pingIntervalMin.value = s.pingIntervalMin;
+  form.durationMin.value = s.durationMin;
+  form.headStartMin.value = s.headStartMin;
+  form.extraPings.value = s.extraPings;
+  form.radius.value = s.zone?.radius ?? 1500;
+  form.emergencyPhone.value = s.emergencyPhone || '';
+  form.meetingLabel.value = s.meetingPoint?.label ?? '';
+  form.pingWarningSec.value = s.pingWarningSec;
+  form.signalAlarmMin.value = s.signalAlarmMin;
+  form.transportReports.checked = !!s.transportReports;
+  form.shrinkEnabled.checked = !!s.shrinkEnabled;
+  form.shrinkFinalRadius.value = s.shrinkFinalRadius;
+  form.rules.value = s.rules || '';
+  pendingZone = s.zone ? { lat: s.zone.lat, lng: s.zone.lng } : null;
+  pendingMeeting = s.meetingPoint ? { lat: s.meetingPoint.lat, lng: s.meetingPoint.lng } : null;
+  $('#setMsg').textContent = '';
+  renderPointInfo();
+}
+
+function markDirty() {
+  settingsDirty = true;
+  $('#setMsg').textContent = 'Nicht gespeichert';
+  renderPointInfo();
+  renderMap();
+}
+
+function renderPointInfo() {
+  const fmt = (p) => `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
+  $('#zoneInfo').textContent = pendingZone ? `Mitte ${fmt(pendingZone)}` : 'Kein Spielfeld festgelegt';
+  $('#meetingInfo').textContent = pendingMeeting ? `Punkt ${fmt(pendingMeeting)}` : 'Kein Treffpunkt festgelegt';
+}
+
+form.addEventListener('input', markDirty);
+
+function setPicking(target) {
+  picking = target;
+  $('#zonePick').textContent = target === 'zone' ? 'Jetzt auf die Karte klicken …' : 'Spielfeld-Mitte auf Karte wählen';
+  $('#meetingPick').textContent = target === 'meeting' ? 'Jetzt auf die Karte klicken …' : 'Treffpunkt auf Karte wählen';
+  $('#adminMap').classList.toggle('picking', !!target);
+  if (target) $('#adminMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+$('#zonePick').addEventListener('click', () => setPicking(picking === 'zone' ? null : 'zone'));
+$('#zoneClear').addEventListener('click', () => { pendingZone = null; setPicking(null); markDirty(); });
+$('#meetingPick').addEventListener('click', () => setPicking(picking === 'meeting' ? null : 'meeting'));
+$('#meetingClear').addEventListener('click', () => { pendingMeeting = null; setPicking(null); markDirty(); });
+
+function onMapClick(e) {
+  if (!picking) return;
+  const point = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
+  if (picking === 'zone') {
+    pendingZone = point;
+    if (!form.radius.value) form.radius.value = 1500;
+  } else {
+    pendingMeeting = point;
+    if (!form.meetingLabel.value) form.meetingLabel.focus();
+  }
+  setPicking(null);
+  markDirty();
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const settings = {
+    pingIntervalMin: Number(form.pingIntervalMin.value),
+    durationMin: Number(form.durationMin.value),
+    headStartMin: Number(form.headStartMin.value),
+    extraPings: Number(form.extraPings.value),
+    emergencyPhone: form.emergencyPhone.value,
+    zone: pendingZone ? { ...pendingZone, radius: Number(form.radius.value) || 1500 } : null,
+    meetingPoint: pendingMeeting ? { ...pendingMeeting, label: form.meetingLabel.value } : null,
+    pingWarningSec: Number(form.pingWarningSec.value),
+    signalAlarmMin: Number(form.signalAlarmMin.value),
+    transportReports: form.transportReports.checked,
+    shrinkEnabled: form.shrinkEnabled.checked,
+    shrinkFinalRadius: Number(form.shrinkFinalRadius.value) || 400,
+    rules: form.rules.value,
+  };
+  settingsDirty = false;
+  if (await act('PATCH', '', { settings })) toast('Einstellungen gespeichert');
+  else settingsDirty = true;
+});
+
+// Einstellungen so, wie sie gerade im Formular stehen (für Regel-Vorschau und Standardtext)
+function formSettings() {
+  return {
+    pingIntervalMin: Number(form.pingIntervalMin.value), durationMin: Number(form.durationMin.value),
+    headStartMin: Number(form.headStartMin.value), pingWarningSec: Number(form.pingWarningSec.value),
+    zone: pendingZone || null, shrinkEnabled: form.shrinkEnabled.checked, transportReports: form.transportReports.checked,
+    emergencyPhone: form.emergencyPhone.value.trim(),
+    meetingPoint: pendingMeeting ? { label: form.meetingLabel.value || 'Treffpunkt' } : null,
+    rules: form.rules.value,
+  };
+}
+
+$('#rulesDefault').addEventListener('click', () => {
+  if (form.rules.value.trim() && !confirm('Den bisherigen Regeltext durch die Standardregeln ersetzen?')) return;
+  form.rules.value = defaultRules(formSettings());
+  markDirty();
+});
+
+$('#rulesPreview').addEventListener('click', () => {
+  openOverlay(el('div', { class: 'card stack' },
+    el('h2', { text: 'Regeln – so sehen es die Spieler' }),
+    el('div', { class: 'rules-text', text: rulesText(formSettings()) }),
+    el('button', { class: 'btn primary', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
+});
+
+// --- Probespiel, Druckblatt, Auswertung --------------------------------------
+
+$('#addBots').addEventListener('click', async () => {
+  if (await act('POST', '/bots', { runners: 3, hunters: 2 })) toast('Test-Geräte hinzugefügt – sie bewegen sich alle 3 Sekunden');
+});
+$('#removeBots').addEventListener('click', () => act('DELETE', '/bots'));
+$('#printSheet').addEventListener('click', () => window.open(`/print#${roomId}`, '_blank'));
+
+const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+let roundsKey = '';
+function renderRounds() {
+  $('#csvRounds').href = `/api/admin/rooms/${roomId}/export/auswertung.csv`;
+  $('#csvEvents').href = `/api/admin/rooms/${roomId}/export/verlauf.csv`;
+  // Nur bei neuen Runden neu aufbauen, sonst klappen geöffnete Runden bei jeder Abfrage wieder zu
+  const key = `${roomId}:${R.rounds.map((r) => r.endedAt).join(',')}`;
+  if (key === roundsKey) return;
+  roundsKey = key;
+  const rounds = [...R.rounds].reverse();
+  $('#rounds').replaceChildren(...(rounds.length
+    ? rounds.map((r) => el('details', { class: 'round' },
+      el('summary', {},
+        el('strong', { text: `Runde ${r.no}` }),
+        ` · ${fmtTime(r.startedAt)}–${fmtTime(r.endedAt)} Uhr · `,
+        el('span', { text: r.winner === 'hunters' ? 'Jäger gewinnen' : r.winner === 'runners' ? 'Gejagte gewinnen' : 'abgebrochen' })),
+      el('table', { class: 'round-table' },
+        el('thead', {}, el('tr', {}, el('th', { text: 'Gejagte' }), el('th', { text: 'Gefangen' }), el('th', { text: 'Im Spiel' }))),
+        el('tbody', {}, r.runners.map((g) => el('tr', {},
+          el('td', { text: g.name }),
+          el('td', { text: g.caughtAt ? `${fmtTime(g.caughtAt)} Uhr` : 'nicht gefangen' }),
+          el('td', { text: `${String(g.survivedMin).replace('.', ',')} min` }))))),
+      el('p', {
+        class: 'small muted',
+        text: `${n(r.pings.regular, 'Ping', 'Pings')}, ${n(r.pings.extra, 'Extra-Ping', 'Extra-Pings')}, ${n(r.pings.admin, 'Sofort-Ping', 'Sofort-Pings')} · ${n(r.emergencies, 'Notfall', 'Notfälle')} · Ping alle ${r.settings.pingIntervalMin} min, Dauer ${r.settings.durationMin} min`,
+      })))
+    : [el('p', { class: 'small muted', text: 'Nach dem ersten Spielende steht hier, wer wann gefangen wurde.' })]));
+}
+
+// --- Nachricht + Verlauf -----------------------------------------------------
+
+function renderMessage() {
+  $('#msgCurrent').textContent = R.message ? `Aktiv seit ${fmtTime(R.message.at)}: „${R.message.text}“` : 'Keine aktive Nachricht.';
+  $('#msgClear').disabled = !R.message;
+  $('#msgMeeting').disabled = !R.settings.meetingPoint;
+  $('#msgMeeting').title = R.settings.meetingPoint ? '' : 'Erst in den Einstellungen einen Treffpunkt festlegen';
+}
+
+$('#msgForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('#msgText').value.trim();
+  if (!text) return;
+  if (await act('POST', '/message', { text })) { $('#msgText').value = ''; toast('Nachricht gesendet'); }
+});
+$('#msgClear').addEventListener('click', () => act('POST', '/message', { text: '' }));
+$('#msgMeeting').addEventListener('click', async () => {
+  const mp = R.settings.meetingPoint;
+  if (!mp || !confirm(`Alle Handys zum Treffpunkt „${mp.label}“ rufen?`)) return;
+  const text = `Bitte alle sofort zum Treffpunkt: ${mp.label}! Die Route findet ihr unten unter „Treffpunkt“.`;
+  if (await act('POST', '/message', { text })) toast('Alle wurden zum Treffpunkt gerufen');
+});
+
+function renderEvents() {
+  swapIfChanged($('#events'), [...R.events].reverse().map((ev) =>
+    el('li', { class: ev.text.startsWith('NOTFALL') ? 'sos-event' : '' }, el('time', { text: fmtTime(ev.at) }), el('span', { text: ev.text }))));
+}
+
+// --- Karte ------------------------------------------------------------------------
+
+function renderMap() {
+  if (!map || !R) return;
+  const hunter = cssVar('--hunter'), runner = cssVar('--runner'), neutral = cssVar('--caught'), primary = cssVar('--primary');
+  const t = now();
+
+  layers.preview.clearLayers();
+  layers.meeting.clearLayers();
+  // aktuelles Spielfeld (schrumpft ggf. während des Spiels) und End-Kreis
+  drawZone(layers.zone, R.zone, R.zoneFinalRadius);
+  if (settingsDirty && pendingZone) {
+    L.circle([pendingZone.lat, pendingZone.lng], {
+      radius: Number(form.radius.value) || 1500, color: primary, weight: 2, dashArray: '2 6', fillOpacity: 0.08, interactive: false,
+    }).addTo(layers.preview);
+  }
+  // Treffpunkt: gespeicherter Stand, beim Bearbeiten der Formularstand
+  const mp = settingsDirty
+    ? pendingMeeting && { ...pendingMeeting, label: `${form.meetingLabel.value || 'Treffpunkt'} (nicht gespeichert)` }
+    : R.settings.meetingPoint;
+  if (mp) meetingMarker(mp).addTo(layers.meeting);
+
+  layers.pings.clearLayers();
+  const ping = R.pings.at(-1);
+  if (ping) {
+    for (const p of ping.positions) {
+      if (!p.missing) L.circleMarker([p.lat, p.lng], { radius: 12, color: runner, weight: 2, fill: false, dashArray: '3 3', interactive: false }).addTo(layers.pings);
+    }
+  }
+
+  layers.players.clearLayers();
+  for (const p of R.players) {
+    if (!p.pos) continue;
+    const stale = !p.lastSeen || t - p.lastSeen > 60000;
+    const color = p.role === 'hunter' ? hunter : p.role === 'runner' ? runner : neutral;
+    labeledMarker([p.pos.lat, p.pos.lng], {
+      color: p.emergency ? cssVar('--danger-solid') : color,
+      radius: p.emergency ? 12 : 8,
+      fill: stale && !p.emergency ? 0.25 : 0.9,
+      label: `${p.emergency ? '🚨 ' : ''}${p.name}${p.outside ? ' ⚠' : ''}${p.transport && p.role === 'runner' ? ` ${TRANSPORT_ICON[p.transport.mode]}` : ''}`,
+      className: p.emergency ? 'sos' : stale ? 'old' : '',
+    }).addTo(layers.players);
+  }
+
+  if (pendingFocus) {
+    map.setView(pendingFocus, 17);
+    pendingFocus = null;
+    fitted = true;
+  }
+  if (!fitted) fitted = fitAll();
+}
+
+function fitAll() {
+  const pts = R.players.filter((p) => p.pos).map((p) => [p.pos.lat, p.pos.lng]);
+  const { zone: z, meetingPoint: mp } = R.settings;
+  if (mp) pts.push([mp.lat, mp.lng]);
+  let bounds = pts.length ? L.latLngBounds(pts) : null;
+  if (z) {
+    const zb = L.latLng(z.lat, z.lng).toBounds(z.radius * 2);
+    bounds = bounds ? bounds.extend(zb) : zb;
+  }
+  if (!bounds) return false;
+  map.fitBounds(bounds.pad(0.1), { maxZoom: 16 });
+  return true;
+}
+
+$('#fitAll').addEventListener('click', () => { if (R) fitAll(); });
+
+boot().catch(handleError);

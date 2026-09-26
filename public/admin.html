@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Manhunt – Spielleitung</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Anmeldung -->
+  <div id="loginView" class="center-page hidden">
+    <main class="stack">
+      <h1>Spielleitung</h1>
+      <form id="loginForm" class="card stack">
+        <label class="field" for="password">Passwort (Spielleitung oder Aufsicht)</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button class="btn primary big" type="submit">Anmelden</button>
+        <p id="loginErr" class="error"></p>
+      </form>
+    </main>
+  </div>
+
+  <div id="adminWrap" class="admin-wrap hidden">
+    <!-- Offene Notfälle aller Räume – auf jeder Ansicht sichtbar -->
+    <div id="alertBar" class="alert-bar hidden" role="alert" aria-live="assertive"></div>
+
+    <!-- Raumliste -->
+    <section id="listView" class="hidden">
+      <div class="admin-head">
+        <h1 style="margin:0">Räume</h1>
+        <div class="row">
+          <span class="badge supervisor-only" title="Du bist als Aufsicht angemeldet: ansehen, Notfälle bearbeiten, Nachrichten senden">Aufsicht</span>
+          <button id="logoutBtn" class="btn sm" type="button">Abmelden</button>
+        </div>
+      </div>
+      <form id="newRoomForm" class="card row admin-only" style="margin-bottom:1rem">
+        <input id="newRoomName" maxlength="24" placeholder="Name des neuen Raums, z. B. Runde 1" aria-label="Raumname">
+        <button class="btn primary" type="submit">Raum erstellen</button>
+      </form>
+      <div id="roomGrid" class="room-grid"></div>
+      <p id="noRooms" class="muted hidden">Noch keine Räume. Erstelle oben den ersten.</p>
+    </section>
+
+    <!-- Raumdetail -->
+    <section id="roomView" class="hidden">
+      <div class="admin-head">
+        <div class="row">
+          <a href="#" class="btn sm">← Räume</a>
+          <h1 id="rName" style="margin:0"></h1>
+          <button id="renameRoom" class="btn sm admin-only" type="button">Umbenennen</button>
+          <span id="rStatus" class="badge"></span>
+          <span class="badge supervisor-only">Aufsicht</span>
+        </div>
+        <div id="rTimers" class="status-line"></div>
+      </div>
+
+      <div class="room-layout">
+        <div class="col main">
+          <div class="card stack first">
+            <div id="controls" class="row"></div>
+            <div id="result"></div>
+            <p id="autoDel" class="small muted"></p>
+          </div>
+
+          <div class="card stack">
+            <h2>Einladen</h2>
+            <div class="invite">
+              <img id="qr" alt="QR-Code zum Beitreten" title="Groß anzeigen">
+              <div class="stack">
+                <div>Code: <span id="rCode" class="big-code"></span></div>
+                <div id="joinUrl" class="join-url"></div>
+                <div class="row">
+                  <button id="copyUrl" class="btn sm" type="button">Link kopieren</button>
+                  <button id="qrFull" class="btn sm" type="button">QR groß anzeigen</button>
+                  <button id="printSheet" class="btn sm" type="button">Druckblatt</button>
+                  <button id="joinToggle" class="btn sm admin-only" type="button"></button>
+                </div>
+              </div>
+            </div>
+            <div id="urlWarn"></div>
+          </div>
+
+          <div class="card stack">
+            <div class="row" style="justify-content:space-between">
+              <h2 id="pTitle" style="margin:0">Geräte</h2>
+              <form id="drawForm" class="row admin-only">
+                <label class="small muted" for="drawN">Gejagte</label>
+                <input id="drawN" type="number" min="1" value="3" style="width:4.5em">
+                <button class="btn sm" type="submit">Rollen auslosen</button>
+              </form>
+            </div>
+            <div class="table-wrap">
+              <table id="pTable">
+                <thead><tr><th>Name</th><th>Rolle</th><th>Status</th><th>Signal / Akku</th><th></th></tr></thead>
+                <tbody id="pBody"></tbody>
+              </table>
+            </div>
+            <p class="small muted">Beim Auslosen werden die übrigen Geräte Jäger. Wer nach dem Verteilen der Rollen oder während des Spiels beitritt, wird automatisch Jäger. Jäger-Teams brauchen nur ein Handy – überzählige Geräte melden sich in der Lobby selbst ab oder du entfernst sie hier.</p>
+            <div class="bot-box admin-only">
+              <strong>Probespiel</strong>
+              <span class="small muted">Test-Geräte laufen von selbst über die Karte, Jäger steuern auf den letzten Ping zu; Test-Gejagte gelten als gefangen, wenn ein Jäger näher als 20 m kommt.</span>
+              <div class="row">
+                <button id="addBots" class="btn sm" type="button">3 Gejagte + 2 Jäger hinzufügen</button>
+                <button id="removeBots" class="btn sm" type="button">Test-Geräte entfernen</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card stack admin-only">
+            <h2>Einstellungen</h2>
+            <form id="settingsForm" class="stack">
+              <div class="settings-grid">
+                <label>Ping-Intervall (min)<input name="pingIntervalMin" type="number" min="1" max="180" required></label>
+                <label>Spieldauer (min)<input name="durationMin" type="number" min="5" max="1440" required></label>
+                <label>Vorsprung (min)<input name="headStartMin" type="number" min="0" max="120" required></label>
+                <label>Extra-Pings (Jäger gesamt)<input name="extraPings" type="number" min="0" max="50" required></label>
+                <label>Spielfeld-Radius (m)<input name="radius" type="number" min="50" max="50000" step="50"></label>
+                <label>Notfall-Telefon (optional)<input name="emergencyPhone" type="tel" maxlength="26" placeholder="+49 170 1234567" autocomplete="off"></label>
+                <label>Vorwarnung vor Ping (s, 0 = aus)<input name="pingWarningSec" type="number" min="0" max="600" step="15" required></label>
+                <label>Alarm ohne Signal nach (min, 0 = aus)<input name="signalAlarmMin" type="number" min="0" max="30" step="0.5" required></label>
+              </div>
+              <div class="check-row">
+                <label class="check"><input name="transportReports" type="checkbox"> Gejagte melden ihr Verkehrsmittel (U, S, Bus, Tram)</label>
+                <span class="check-group">
+                  <label class="check"><input name="shrinkEnabled" type="checkbox"> Spielfeld schrumpft bis Spielende auf</label>
+                  <label class="inline-num"><input name="shrinkFinalRadius" type="number" min="50" max="50000" step="50" aria-label="End-Radius in Metern"> m Radius</label>
+                </span>
+              </div>
+              <div class="row">
+                <button id="zonePick" class="btn sm" type="button">Spielfeld-Mitte auf Karte wählen</button>
+                <button id="zoneClear" class="btn sm" type="button">Kein Spielfeld</button>
+                <span id="zoneInfo" class="small muted"></span>
+              </div>
+              <label class="field">Treffpunkt-Name<input name="meetingLabel" maxlength="60" placeholder="z. B. Weltzeituhr Alexanderplatz"></label>
+              <div class="row">
+                <button id="meetingPick" class="btn sm" type="button">Treffpunkt auf Karte wählen</button>
+                <button id="meetingClear" class="btn sm" type="button">Kein Treffpunkt</button>
+                <span id="meetingInfo" class="small muted"></span>
+              </div>
+              <label class="field">Regeln für die Spieler (leer = Standardregeln aus den Einstellungen)
+                <textarea name="rules" rows="6" maxlength="3000"></textarea>
+              </label>
+              <div class="row">
+                <button id="rulesDefault" class="btn sm" type="button">Standardregeln zum Bearbeiten einsetzen</button>
+                <button id="rulesPreview" class="btn sm" type="button">Vorschau</button>
+              </div>
+              <div class="row">
+                <button class="btn primary" type="submit">Einstellungen speichern</button>
+                <span id="setMsg" class="small muted"></span>
+              </div>
+            </form>
+          </div>
+
+          <div class="card stack">
+            <h2>Nachricht an alle</h2>
+            <form id="msgForm" class="stack">
+              <textarea id="msgText" rows="2" maxlength="300" placeholder="z. B. Spielabbruch – alle sofort zum Treffpunkt!"></textarea>
+              <div class="row">
+                <button class="btn primary" type="submit">An alle senden</button>
+                <button id="msgMeeting" class="btn" type="button">Alle zum Treffpunkt rufen</button>
+                <button id="msgClear" class="btn" type="button">Nachricht zurückziehen</button>
+              </div>
+            </form>
+            <div id="msgCurrent" class="small muted"></div>
+          </div>
+
+          <div class="card stack">
+            <h2>Auswertung</h2>
+            <div id="rounds"></div>
+            <div class="row">
+              <a id="csvRounds" class="btn sm" download>Auswertung als CSV</a>
+              <a id="csvEvents" class="btn sm" download>Verlauf als CSV</a>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Verlauf</h2>
+            <ul id="events" class="list events"></ul>
+          </div>
+        </div>
+
+        <div class="col map-col">
+          <div id="adminMap"></div>
+          <div class="row small muted" style="margin-top:.5rem;justify-content:space-between">
+            <span><span class="badge hunter">Jäger</span> <span class="badge runner">Gejagt</span> blass = kein aktuelles Signal · Ringe = letzter Ping · 🏁 = Treffpunkt</span>
+            <button id="fitAll" class="btn sm" type="button">Alle anzeigen</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="overlay" class="overlay hidden"></div>
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/admin.js"></script>
+</body>
+</html>

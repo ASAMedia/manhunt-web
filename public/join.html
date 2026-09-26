@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Manhunt – Beitreten</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="center-page">
+  <main class="stack">
+    <h1 id="roomName">Manhunt</h1>
+    <p id="info" class="muted" style="text-align:center">Lade Spiel …</p>
+    <form id="joinForm" class="card stack hidden">
+      <label class="field" for="name">Dein Name – bei Jäger-Teams der Teamname</label>
+      <input id="name" maxlength="24" autocomplete="nickname" required>
+      <button class="btn primary big" type="submit">Mitspielen</button>
+      <p id="err" class="error"></p>
+    </form>
+    <p style="text-align:center"><a class="small muted" href="/">Anderen Code eingeben</a></p>
+  </main>
+  <script type="module" src="/join.js"></script>
+</body>
+</html>

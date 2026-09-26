@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#d13b3b">
+  <title>Manhunt</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="play">
+  <header class="topbar">
+    <div class="title-wrap">
+      <div class="title" id="roomName">Manhunt</div>
+      <div class="subtitle" id="meName"></div>
+    </div>
+    <div class="row" style="flex-wrap:nowrap">
+      <span id="roleBadge" class="badge">…</span>
+      <span id="sosSlot"></span>
+    </div>
+  </header>
+  <div id="banners" class="banners"></div>
+  <div id="map"></div>
+  <section class="panel">
+    <div id="timers" class="timers"></div>
+    <div id="alerts" class="stack"></div>
+    <div id="content" class="stack"></div>
+  </section>
+
+  <div id="startOverlay" class="overlay hidden">
+    <div class="card stack">
+      <h2>Bereit?</h2>
+      <p>Damit das Spiel funktioniert, braucht diese Seite deinen Standort.</p>
+      <ul class="small">
+        <li>Lass die Seite <strong>das ganze Spiel über geöffnet</strong> und den Bildschirm an.</li>
+        <li>Die Spielleitung sieht deinen Standort immer (Aufsicht).</li>
+        <li>Gejagte werden den Jägern nur zu den Ping-Zeitpunkten gezeigt. Jäger sind für Gejagte nie sichtbar.</li>
+        <li>Powerbank mitnehmen und Bildschirmhelligkeit etwas runterdrehen.</li>
+      </ul>
+      <button id="startBtn" class="btn primary big" type="button">Standort freigeben &amp; loslegen</button>
+      <p id="startErr" class="error"></p>
+    </div>
+  </div>
+
+  <div id="infoOverlay" class="overlay hidden"></div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/play.js"></script>
+</body>
+</html>

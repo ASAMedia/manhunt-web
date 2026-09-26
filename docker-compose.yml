@@ -1,0 +1,58 @@
+# Auf dem Server reichen diese Datei und eine .env (siehe .env.example).
+# Das Image wird fertig von GitHub geladen (ghcr.io); lokal mit Quellcode baut
+# docker-compose.override.yml es stattdessen selbst.
+#
+# Nur App (http://127.0.0.1:3000, z. B. hinter vorhandenem Reverse Proxy):
+#   docker compose pull && docker compose up -d
+# Mit eigener Domain und automatischem HTTPS (Caddy, Ports 80/443):
+#   docker compose --profile caddy pull && docker compose --profile caddy up -d
+# Mit kostenlosem Cloudflare-Schnelltunnel (ohne Domain):
+#   docker compose --profile tunnel up -d && docker compose logs tunnel | grep trycloudflare
+# Update auf die neueste Version: gleicher Befehl wie beim Start (pull + up -d)
+
+services:
+  app:
+    image: ${MANHUNT_IMAGE:-ghcr.io/asamedia/manhunt-web:latest}
+    restart: unless-stopped
+    init: true
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Bitte ADMIN_PASSWORD in .env setzen}
+      SUPERVISOR_PASSWORD: ${SUPERVISOR_PASSWORD:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      MAP_CENTER: ${MAP_CENTER:-}
+      TILE_URL: ${TILE_URL:-}
+      TILE_ATTRIBUTION: ${TILE_ATTRIBUTION:-}
+      AUTO_DELETE_DAYS: ${AUTO_DELETE_DAYS:-7}
+      TRUST_PROXY: "1"
+    volumes:
+      - manhunt-data:/data
+    ports:
+      - "127.0.0.1:${LOCAL_PORT:-3000}:3000"
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    # Automatisches HTTPS (Let's Encrypt) für DOMAIN, leitet an die App weiter
+    command: caddy reverse-proxy --from ${DOMAIN:-bitte-DOMAIN-in-env-setzen} --to app:3000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://app:3000
+    depends_on:
+      - app
+
+volumes:
+  manhunt-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Manhunt</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="center-page">
+  <main class="stack">
+    <h1>Manhunt</h1>
+    <p class="muted" style="text-align:center">Scanne den QR-Code der Spielleitung oder gib den Spielcode ein.</p>
+    <form id="codeForm" class="card stack">
+      <input id="code" class="code-input" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Spielcode" required>
+      <button class="btn primary big" type="submit">Beitreten</button>
+    </form>
+    <a id="resume" class="btn big hidden" href="/play">Zurück zu meinem Spiel</a>
+    <p style="text-align:center"><a class="small muted" href="/admin">Spielleitung</a></p>
+  </main>
+  <script type="module" src="/index.js"></script>
+</body>
+</html>

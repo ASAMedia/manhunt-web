@@ -1,0 +1,8 @@
+# Nur für die Arbeit mit dem Quellcode: Docker Compose liest diese Datei automatisch
+# mit ein und baut das Image lokal, statt es von GitHub zu laden.
+#   docker compose up -d --build
+# Auf dem Server NICHT mitkopieren – dort wird das fertige Image verwendet.
+services:
+  app:
+    build: .
+    image: manhunt-web:local
