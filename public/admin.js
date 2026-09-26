@@ -527,6 +527,10 @@ function playerRow(p, t) {
   if (p.outside) status.push(el('span', { class: 'badge danger', text: 'außerhalb' }));
   if (p.warnings?.some((w) => w.type === 'signal')) status.push(el('span', { class: 'badge warn', text: '⚠ kein Signal' }));
   if (p.geoError) status.push(el('span', { class: 'badge warn', text: p.geoError }));
+  if (p.blockArmed) status.push(el('span', { class: 'badge', text: '🛡 blockt nächsten Ping' }));
+  // Handy-Check: in der Lobby immer, im Spiel nur wenn etwas fehlt
+  if (p.check && !p.bot && (R.status === 'lobby' || !checkOk(p.check))) status.push(checkBadge(p.check));
+  else if (!p.check && !p.bot && R.status === 'lobby') status.push(el('span', { class: 'badge', text: 'Check offen' }));
 
   const btn = (text, onclick, title) => el('button', { class: 'btn sm', type: 'button', onclick, text, title });
   const actions = [];
@@ -543,6 +547,22 @@ function playerRow(p, t) {
       el('div', { class: 'batt', text: batteryText(p) })),
     el('td', { class: 'actions' }, actions));
 }
+
+const checkOk = (c) => (c.gps === 'ok' || c.gps === 'weak') && c.wakeLock === 'ok' && c.sound === 'ok';
+
+function checkSummary(c) {
+  return [
+    `Standort: ${{ ok: 'genau', weak: 'ungenau', fail: 'geht nicht' }[c.gps] || '?'}`,
+    `Display an: ${{ ok: 'ja', fail: 'nicht sicher', unsupported: 'nicht unterstützt' }[c.wakeLock] || '?'}`,
+    `Ton: ${{ ok: 'gehört', fail: 'nicht gehört', untested: 'nicht getestet' }[c.sound] || '?'}`,
+    `Akku: ${c.battery == null ? '?' : `${Math.round(c.battery * 100)} %`}`,
+    `Gerät: ${{ ios: 'iPhone', android: 'Android', other: 'anderes' }[c.platform] || '?'}${c.installed ? ' (als App)' : ''}`,
+  ].join(' · ');
+}
+
+const checkBadge = (c) => el('span', {
+  class: `badge ${checkOk(c) ? 'running' : 'warn'}`, text: checkOk(c) ? 'Check ✓' : 'Check ⚠', title: checkSummary(c),
+});
 
 function signalText(p, t) {
   if (!p.lastSeen) return 'noch nie';
@@ -575,6 +595,12 @@ function showPlayerDialog(pid) {
       el('dt', { text: 'Akku' }), el('dd', { text: batteryText(p).replace('Akku ', '') }),
       el('dt', { text: 'Beigetreten' }), el('dd', { text: `${fmtTime(p.joinedAt)} Uhr${p.bot ? ' (Test-Gerät)' : ''}` }),
       transport ? el('dt', { text: 'Verkehrsmittel' }) : null, transport ? el('dd', { text: transport }) : null,
+      p.wasRunner || p.role === 'runner' ? el('dt', { text: 'Blocks' }) : null,
+      p.wasRunner || p.role === 'runner'
+        ? el('dd', { text: `${p.blocksUsed} von ${R.settings.blocksPerRunner} eingesetzt${p.blockArmed ? ' – nächster Ping blockiert' : ''}` })
+        : null,
+      p.bot ? null : el('dt', { text: 'Handy-Check' }),
+      p.bot ? null : el('dd', { text: p.check ? `${checkOk(p.check) ? '✓' : '⚠'} ${checkSummary(p.check)}` : 'noch nicht gemacht' }),
       p.geoError ? el('dt', { text: 'Problem' }) : null, p.geoError ? el('dd', { text: p.geoError }) : null),
     el('div', { class: 'dialog-actions' },
       p.pos ? b('Auf Karte zeigen', () => {
@@ -633,6 +659,7 @@ function renderSettings() {
   form.shrinkEnabled.checked = !!s.shrinkEnabled;
   form.shrinkFinalRadius.value = s.shrinkFinalRadius;
   form.rules.value = s.rules || '';
+  form.blocksPerRunner.value = s.blocksPerRunner ?? 1;
   pendingZone = s.zone ? { lat: s.zone.lat, lng: s.zone.lng } : null;
   pendingMeeting = s.meetingPoint ? { lat: s.meetingPoint.lat, lng: s.meetingPoint.lng } : null;
   $('#setMsg').textContent = '';
@@ -697,6 +724,7 @@ form.addEventListener('submit', async (e) => {
     shrinkEnabled: form.shrinkEnabled.checked,
     shrinkFinalRadius: Number(form.shrinkFinalRadius.value) || 400,
     rules: form.rules.value,
+    blocksPerRunner: Number(form.blocksPerRunner.value),
   };
   settingsDirty = false;
   if (await act('PATCH', '', { settings })) toast('Einstellungen gespeichert');
@@ -709,6 +737,7 @@ function formSettings() {
     pingIntervalMin: Number(form.pingIntervalMin.value), durationMin: Number(form.durationMin.value),
     headStartMin: Number(form.headStartMin.value), pingWarningSec: Number(form.pingWarningSec.value),
     zone: pendingZone || null, shrinkEnabled: form.shrinkEnabled.checked, transportReports: form.transportReports.checked,
+    blocksPerRunner: Number(form.blocksPerRunner.value),
     emergencyPhone: form.emergencyPhone.value.trim(),
     meetingPoint: pendingMeeting ? { label: form.meetingLabel.value || 'Treffpunkt' } : null,
     rules: form.rules.value,
@@ -761,7 +790,7 @@ function renderRounds() {
           el('td', { text: `${String(g.survivedMin).replace('.', ',')} min` }))))),
       el('p', {
         class: 'small muted',
-        text: `${n(r.pings.regular, 'Ping', 'Pings')}, ${n(r.pings.extra, 'Extra-Ping', 'Extra-Pings')}, ${n(r.pings.admin, 'Sofort-Ping', 'Sofort-Pings')} · ${n(r.emergencies, 'Notfall', 'Notfälle')} · Ping alle ${r.settings.pingIntervalMin} min, Dauer ${r.settings.durationMin} min`,
+        text: `${n(r.pings.regular, 'Ping', 'Pings')}, ${n(r.pings.extra, 'Extra-Ping', 'Extra-Pings')}, ${n(r.pings.admin, 'Sofort-Ping', 'Sofort-Pings')}, ${n(r.blocks || 0, 'Block', 'Blocks')} · ${n(r.emergencies, 'Notfall', 'Notfälle')} · Ping alle ${r.settings.pingIntervalMin} min, Dauer ${r.settings.durationMin} min`,
       })))
     : [el('p', { class: 'small muted', text: 'Nach dem ersten Spielende steht hier, wer wann gefangen wurde.' })]));
 }
@@ -820,7 +849,7 @@ function renderMap() {
   const ping = R.pings.at(-1);
   if (ping) {
     for (const p of ping.positions) {
-      if (!p.missing) L.circleMarker([p.lat, p.lng], { radius: 12, color: runner, weight: 2, fill: false, dashArray: '3 3', interactive: false }).addTo(layers.pings);
+      if (p.lat != null) L.circleMarker([p.lat, p.lng], { radius: 12, color: runner, weight: 2, fill: false, dashArray: '3 3', interactive: false }).addTo(layers.pings);
     }
   }
 

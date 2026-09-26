@@ -1,169 +1,155 @@
 # Manhunt – Web
 
 Browserbasiertes Fang- und Versteckspiel („Manhunt“ / „Mister X“) für Gruppen, z. B. auf Klassenfahrt.
-Läuft komplett im Browser – **keine App, keine Accounts** – und wird mit Docker selbst gehostet.
+Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird mit Docker selbst gehostet.
 
-- **Spielleitung (Admin):** sieht alle Räume, erstellt Räume, lädt per QR-Code ein, setzt Rollen oder lost sie aus, sieht alle Geräte live auf der Karte.
+- **Spielleitung (Admin):** erstellt Räume, lädt per QR-Code ein, setzt oder lost Rollen aus, sieht alle Geräte live auf der Karte.
+- **Aufsicht (optional):** eine zweite Person mit eigenem Passwort, die zusieht und Notfälle bearbeitet.
 - **Gejagte** (ein Handy pro Person): werden den Jägern nur zu den Ping-Zeitpunkten gezeigt.
 - **Jäger-Teams** (ein Handy pro Team): sehen die letzten Pings der Gejagten und die anderen Jäger-Teams live.
 
 ## Funktionen
 
+**Spiel**
+
 | | |
 |---|---|
-| Räume | beliebig viele, nur die Spielleitung kann sie anlegen; Beitritt per QR-Code oder 6-stelligem Code, Beitritt schließbar |
-| Rollen | pro Gerät setzen oder „N Gejagte auslosen“ (Rest wird Jäger); wer nach dem Verteilen der Rollen oder während des Spiels beitritt, wird automatisch Jäger |
-| Pings | frei wählbares Intervall (1–180 min), erster Ping am Ende des Vorsprungs |
-| Extra-Pings | gemeinsamer Vorrat für alle Jäger pro Runde (0–50), nicht während des Vorsprungs |
-| Sofort-Ping | die Spielleitung kann jederzeit einen zusätzlichen Ping auslösen |
-| Fangen | Gejagte melden sich selbst als gefangen und **werden dann Jäger**; Spielleitung kann korrigieren |
-| Spielfeld | Kreis (Mitte auf der Karte wählen + Radius); wer rausgeht, bekommt eine Warnung und wird bei der Spielleitung markiert |
-| Nachricht an alle | z. B. „Spielabbruch – alle zum Treffpunkt“, erscheint auf allen Handys (Android vibriert); Schnellknopf „Alle zum Treffpunkt rufen“ |
-| **Notfall (SOS)** | roter SOS-Knopf oben rechts, **1,5 s gedrückt halten**. Bei der Spielleitung erscheint auf jeder Admin-Seite eine rote Leiste mit Alarmton, Standort, „Auf Karte“ und Route; „Gesehen“ sieht der Schüler auf dem Handy, „Erledigt“ schließt den Notfall. Der Schüler kann selbst Entwarnung geben. Optional mit Notfall-Telefon der Spielleitung (Anruf-Knopf auf dem Handy) |
-| **Treffpunkt** | auf der Karte wählen und benennen; alle sehen ihn auf der Karte (🏁) mit Link zur Fußweg-Route; nach Spielende steht „Alle zum Treffpunkt“ ganz oben |
-| **Töne** | Signalton bei Ping, Spielstart/-ende, Gefangen und Nachricht; pro Handy abschaltbar („🔔 Ton an“), z. B. für Gejagte im Versteck |
-| **Vorwarnung** | Hinweis + Ton kurz vor jedem Ping (Standard 60 s, einstellbar, 0 = aus) |
-| **Verkehrsmittel** (Option) | Mister-X-Stil: Gejagte tippen beim Einsteigen auf 🚇 U-Bahn, 🚆 S-Bahn, 🚌 Bus, 🚊 Tram oder 🚶 zu Fuß; Jäger sehen nur das Verkehrsmittel, nicht die Linie |
-| **Schrumpfendes Spielfeld** (Option) | der Kreis wird vom Ende des Vorsprungs bis Spielende gleichmäßig auf einen End-Radius kleiner; End-Kreis ist auf der Karte zu sehen |
-| **Regeln** | „📋 Regeln“ auf jedem Handy; Standardregeln aus den Einstellungen oder eigener Text |
-| Aufsicht | Spielleitung sieht alle Geräte live, letztes Signal, GPS-Genauigkeit, Akkustand (wo der Browser ihn liefert) |
-| **Warnungen** | gelbe Leiste mit leisem Ton, wenn ein Gerät länger als 3 min (einstellbar) kein Signal sendet oder das Spielfeld verlässt; mit „OK“ quittierbar |
-| **Zweite Aufsicht** | eigenes Passwort (`SUPERVISOR_PASSWORD`): sieht alles, bearbeitet Notfälle/Warnungen, sendet Nachrichten – kann aber nichts starten, einstellen, entfernen oder löschen |
-| **Druckblatt** | A4-Seite mit QR-Code, Code, Kurzanleitung, Eckdaten und Regeln – zum Ausdrucken oder Beamern |
-| **Probespiel** | Test-Geräte (3 Gejagte + 2 Jäger), die selbst über die Karte laufen – zum Ausprobieren allein |
-| **Auswertung** | pro Runde: wer wann gefangen wurde, wie lange im Spiel, Pings, Notfälle; Export als CSV (Excel). Keine Bewegungsspuren |
-| Wiederbeitritt | pro Gerät ein QR-Code, falls ein Handy ausfällt und ein anderes übernimmt |
-| Runden | nach Spielende „Neue Runde“ → Startrollen werden wiederhergestellt, neu auslosen möglich |
-| Schutz vor Versehen | „Spiel verlassen“, „Aus dem Raum entfernen“ und „Raum löschen“ lösen nur durch **2 s Gedrückthalten** aus (Fortschrittsbalken, Loslassen bricht ab) |
-| **Auto-Löschen** | Räume samt Standortdaten werden 7 Tage nach der letzten Aktivität automatisch gelöscht (einstellbar, laufende Spiele nie) |
+| Räume & Beitritt | beliebig viele Räume; Beitritt per QR-Code oder 6-stelligem Code; Beitritt schließbar |
+| Rollen | pro Gerät setzen oder „N Gejagte auslosen“; wer später beitritt, wird automatisch Jäger |
+| Pings | frei wählbares Intervall (1–180 min), erster Ping am Ende des Vorsprungs; **Vorwarnung** kurz vorher |
+| Extra-Pings | gemeinsamer Vorrat für alle Jäger; die Spielleitung kann jederzeit einen Sofort-Ping auslösen |
+| **Blocks** | jeder Gejagte darf (einstellbar, Standard 1×) den nächsten Ping aussetzen und bleibt dabei unsichtbar |
+| Fangen | Gejagte melden sich selbst als gefangen und **werden dann Jäger**; die Spielleitung kann korrigieren |
+| Spielfeld | Kreis auf der Karte; optional **schrumpfend** bis Spielende |
+| Verkehrsmittel (Option) | Mister-X-Stil: Gejagte melden U-Bahn, S-Bahn, Bus, Tram oder zu Fuß – Jäger sehen nur die Art |
+| Treffpunkt | auf der Karte mit Fußweg-Route; nach Spielende „Alle zum Treffpunkt“ |
+| Regeln | „📋 Regeln“ auf jedem Handy – Standardregeln aus den Einstellungen oder eigener Text |
+| Töne | bei Ping, Vorwarnung, Start, Gefangen, Nachricht; pro Handy abschaltbar |
+| Sprachen | Spielerseiten auf **Deutsch und Englisch** (automatisch nach Handy-Sprache, umschaltbar) |
+
+**Sicherheit & Aufsicht**
+
+| | |
+|---|---|
+| **Notfall (SOS)** | SOS-Knopf 1,5 s gedrückt halten → rote Alarmleiste mit Ton auf jeder Admin-Seite, Standort, Route; „Gesehen“ sieht der Schüler; optional Anruf-Knopf mit Notfall-Telefon |
+| **Warnungen** | gelbe Leiste, wenn ein Gerät einige Minuten kein Signal sendet oder das Spielfeld verlässt; gebündelt, quittierbar |
+| **Handy-Check** | prüft vor dem Start Standort, Display-an, Ton, Akku, Vibration mit Tipps für iPhone/Android; Ergebnis in der Geräte-Liste („Check ✓/⚠“) |
+| Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit, Akku |
+| Nachricht an alle | z. B. Spielabbruch; Schnellknopf „Alle zum Treffpunkt rufen“ |
+| Wiederbeitritt | QR-Code pro Gerät, falls ein Handy ausfällt |
+| Schutz vor Versehen | „Spiel verlassen“, „Aus dem Raum entfernen“, „Raum löschen“ nur durch 2 s Gedrückthalten |
+
+**Vorbereitung & Nachbereitung**
+
+| | |
+|---|---|
+| Druckblatt | A4 mit QR-Code, Kurzanleitung, Eckdaten und Regeln – zum Ausdrucken oder Beamern |
+| Probespiel | Test-Geräte, die selbst über die Karte laufen – zum Ausprobieren allein |
+| Auswertung | pro Runde: wer wann gefangen wurde, Pings, Blocks, Notfälle; CSV-Export (Excel); keine Bewegungsspuren |
+| Hilfe | `/hilfe` – Kurzanleitung für Spielleitung und Aufsicht (druckbar) |
+| Datenschutz | `/datenschutz` – für Schüler und Eltern, Deutsch/Englisch, passend zur Konfiguration |
+
+**Technik**
+
+| | |
+|---|---|
+| Als App installierbar | „Zum Home-Bildschirm“ mit Icon und Vollbild; die installierte App weiß, in welchem Spiel man ist |
+| Offline-Karte | Kartenkacheln laufen über einen Zwischenspeicher auf deinem Server; im Handy-Check „Karte speichern“ lädt das Spielfeld für Funklöcher (U-Bahn) vor |
+| Automatisches Löschen | Räume samt Standortdaten 7 Tage nach der letzten Aktivität (einstellbar, laufende Spiele nie) |
+| Tests | über 160 automatische Prüfungen (`npm test`), laufen auf GitHub vor jedem Image-Build |
+| Automatische Updates | optional, nachts um 4 Uhr |
 
 **Spielende:** Alle Gejagten gefangen → die Jäger gewinnen. Zeit abgelaufen → die verbliebenen Gejagten gewinnen.
 
-## Wichtig: Grenzen einer reinen Web-App
+## Wichtig: Grenzen einer Web-App
 
-- **Die Seite muss auf jedem Handy geöffnet bleiben und das Display an.** Browser (vor allem iPhone/Safari) stoppen die Standortübertragung, sobald der Bildschirm aus ist oder man die App wechselt. Die Seite hält das Display per „Wake Lock“ wach (Chrome/Android, Safari ab iOS 16.4) und warnt, wenn das nicht klappt.
+- **Die Seite muss auf jedem Handy geöffnet bleiben und das Display an.** Browser (vor allem iPhone/Safari) stoppen die Standortübertragung, sobald der Bildschirm aus ist. Die Seite hält das Display per „Wake Lock“ wach; der Handy-Check zeigt, wo das nicht klappt, und gibt Tipps.
 - **Powerbank einplanen.** GPS + Display an kostet etwa 15–25 % Akku pro Stunde.
-- **HTTPS ist Pflicht** – sonst geben Browser keinen Standort heraus. Dafür gibt es unten drei fertige Varianten.
-- **Töne:** Browser spielen erst Ton ab, nachdem man die Seite einmal angetippt hat (bei den Spielern passiert das mit „Loslegen“). iPhones sind stumm, wenn der Stummschalter an ist, und vibrieren im Browser nie.
+- **HTTPS ist Pflicht** – sonst gibt es keinen Standort. Dafür gibt es unten drei fertige Varianten.
+- **Töne:** Browser spielen erst Ton ab, nachdem man die Seite angetippt hat. iPhones sind bei Stummschalter stumm und vibrieren im Browser nie.
 - Der **Notfall-Knopf ersetzt keinen Notruf**: Er alarmiert nur die Spielleitung, solange deren Admin-Seite offen ist. Bei Lebensgefahr 112.
-- Die Karte nutzt die Kacheln von OpenStreetMap. Für eine Schulklasse ist das unproblematisch; für große Veranstaltungen `TILE_URL` auf einen anderen Anbieter setzen.
 
-## Installation auf dem Server (fertiges Docker-Image)
+## Installation auf dem Server
 
-Bei jedem Push auf `main` baut GitHub Actions das Image `ghcr.io/asamedia/manhunt-web:latest` (für normale Server und ARM/Raspberry Pi). Auf dem Server braucht es keinen Quellcode – nur Docker und **zwei Dateien** in einem Ordner:
+Bei jedem Push auf `main` testet GitHub Actions den Code und baut dann das Image `ghcr.io/asamedia/manhunt-web:latest` (für normale Server und ARM/Raspberry Pi). Auf dem Server braucht es nur Docker und **zwei Dateien** in einem Ordner:
 
 - `docker-compose.yml` (aus diesem Repo)
-- `.env` (Vorlage: `.env.example`) – mindestens `ADMIN_PASSWORD` setzen, optional `SUPERVISOR_PASSWORD`
+- `.env` (Vorlage: `.env.example`) – mindestens `ADMIN_PASSWORD` setzen
 
-Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:packages`, selbst eingeben):
+In der `.env` wählt `COMPOSE_PROFILES`, welche Zusatzdienste laufen:
 
-```bash
-docker login ghcr.io -u ASAMedia
-```
+| Profil | Wofür |
+|---|---|
+| `caddy` | eigene Domain mit automatischem HTTPS – `DOMAIN` und `PUBLIC_URL` setzen, DNS auf den Server, Ports 80/443 frei |
+| `tunnel` | kostenloser Cloudflare-Schnelltunnel ohne Domain – Adresse mit `docker compose logs tunnel` |
+| `autoupdate` | holt neue Versionen automatisch, täglich 4 Uhr nachts ([Watchtower-Nachfolger](https://github.com/nicholas-fedor/watchtower), braucht Zugriff auf den Docker-Socket) |
+| *(keins)* | nur die App auf `http://127.0.0.1:3000` – für einen vorhandenen Reverse Proxy (nginx, Traefik …) |
 
-Der Server muss während des Spiels online sein. Drei Varianten für HTTPS:
-
-### Variante A: eigene Domain mit automatischem HTTPS (Caddy)
-
-1. DNS-Eintrag (A/AAAA) der Domain auf den Server zeigen lassen, Ports 80 und 443 freigeben.
-2. In `.env`: `DOMAIN=manhunt.example.de` und `PUBLIC_URL=https://manhunt.example.de`
-3. Starten:
-
-```bash
-docker compose --profile caddy pull && docker compose --profile caddy up -d
-```
-
-### Variante B: Server mit vorhandenem Reverse Proxy (nginx, Traefik, Caddy …)
-
-Nur die App starten – sie lauscht auf `127.0.0.1:3000` (Port über `LOCAL_PORT` änderbar):
+Starten und später aktualisieren – immer derselbe Befehl:
 
 ```bash
 docker compose pull && docker compose up -d
 ```
 
-Im vorhandenen Proxy die (Sub-)Domain per HTTPS auf `http://127.0.0.1:3000` weiterleiten und in `.env` `PUBLIC_URL=https://…` setzen. Der Proxy sollte `X-Forwarded-Proto` und `X-Forwarded-For` mitschicken (Standard bei den meisten).
-Läuft der Proxy selbst in Docker (z. B. Traefik), statt des Ports das Netzwerk des Proxys an den Dienst `app` hängen.
+Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:packages`, selbst eingeben): `docker login ghcr.io -u ASAMedia`.
 
-### Variante C: Cloudflare-Schnelltunnel (kostenlos, ohne Domain und ohne Account)
+> **Tunnel:** Die Adresse ändert sich bei jedem Neustart des Tunnels. Am Spieltag also nicht neu starten; falls doch, beigetretene Geräte über den Wiederbeitritts-QR (⋯ in der Geräte-Liste) wieder verbinden.
 
-```bash
-docker compose --profile tunnel pull && docker compose --profile tunnel up -d
-docker compose logs tunnel | grep trycloudflare
-```
-
-Die ausgegebene Adresse `https://….trycloudflare.com` im Browser öffnen und `/admin` anhängen. Die QR-Codes zeigen automatisch auf diese Adresse.
-
-> Die Tunnel-Adresse ändert sich bei jedem Neustart des Tunnels. Also am Spieltag nicht neu starten. Falls doch: Neue Adresse öffnen, bereits beigetretene Geräte über den **Wiederbeitritts-QR** (⋯ in der Geräte-Liste) wieder verbinden.
-
-### Updates
-
-Denselben Befehl wie beim Start noch einmal ausführen (`… pull && … up -d`). Die Spieldaten im Volume `manhunt-data` bleiben erhalten.
-
-### Mit Quellcode arbeiten (lokal)
-
-```bash
-npm install
-docker compose up -d --build
-```
-
-`docker-compose.override.yml` sorgt dafür, dass lokal aus dem Quellcode gebaut wird. Dann `http://localhost:3000/admin` – zum Ausprobieren der Oberfläche. Handys können so nicht mitspielen (kein HTTPS).
+> **Vorhandener Reverse Proxy:** die (Sub-)Domain per HTTPS auf `http://127.0.0.1:3000` weiterleiten, `PUBLIC_URL=https://…` setzen. Läuft der Proxy selbst in Docker, statt des Ports sein Netzwerk an den Dienst `app` hängen.
 
 ## Ablauf am Spieltag
 
 1. `/admin` öffnen, anmelden, **Raum erstellen**.
-2. **Einstellungen:** Ping-Intervall, Spieldauer, Vorsprung, Extra-Pings, **Notfall-Telefon**, Vorwarnung, Signal-Alarm, optional Verkehrsmittel und schrumpfendes Spielfeld. „Spielfeld-Mitte auf Karte wählen“ → auf die Karte klicken → Radius eintragen. „Treffpunkt auf Karte wählen“ → klicken → Namen eintragen. Regeln prüfen („Vorschau“). **Speichern**.
-3. **Druckblatt** ausdrucken oder beamern, oder **QR groß anzeigen** – alle scannen und geben ihren Namen ein.
-4. **Rollen:** einzeln setzen oder „Gejagte auslosen“. Jäger-Teams behalten ein Handy: das Team-Handy benennt sich über „Namen ändern“ um, die anderen melden sich unten mit „Spiel verlassen“ (gedrückt halten) ab.
-5. **Kurz erklären:** SOS-Knopf oben rechts gedrückt halten = Notruf an dich; Treffpunkt und Route stehen im Spiel unten.
-6. **Beitritt schließen.**
-7. Alle tippen auf **„Standort freigeben & loslegen“**. In der Geräte-Liste prüfen, dass jedes Gerät ein frisches Signal hat.
-8. **Spiel starten.**
+2. **Einstellungen:** Ping-Intervall, Dauer, Vorsprung, Extra-Pings, Blocks, Notfall-Telefon, Vorwarnung, Signal-Alarm, optional Verkehrsmittel und schrumpfendes Spielfeld. Spielfeld und Treffpunkt auf der Karte wählen. Regeln prüfen („Vorschau“). **Speichern**.
+3. **Druckblatt** beamern oder **QR groß anzeigen** – alle treten bei und tippen „Standort freigeben & loslegen“.
+4. **Handy-Check** abwarten, bis möglichst alle „Check ✓“ haben; dabei „Karte speichern“ für Funklöcher.
+5. **Rollen** setzen oder auslosen. Jäger-Teams behalten ein Handy, die anderen melden sich unten mit „Spiel verlassen“ ab.
+6. SOS-Knopf kurz erklären, **Beitritt schließen**, **Spiel starten**.
+7. Danach: **Auswertung** ansehen, „Neue Runde“.
 
-Während des Spiels: Blasse Punkte auf der Karte = seit über einer Minute kein Signal (Display aus? Funkloch?). ⚠ = außerhalb des Spielfelds. Die Admin-Seite muss offen bleiben, damit Notrufe ankommen – einmal auf die Seite klicken, sonst blockiert der Browser den Alarmton.
-
-**Tipp:** Erst allein mit dem **Probespiel** (Test-Geräte) ausprobieren, dann einmal mit 3–4 echten Handys auf dem Schulgelände – inklusive iPhone.
-
-Nach dem Spiel: **Auswertung** im Admin-Bereich (pro Runde, als CSV exportierbar), dann „Neue Runde“.
+**Tipp:** Erst allein mit dem **Probespiel** ausprobieren, dann einmal mit 3–4 echten Handys – inklusive iPhone. Die Kurzanleitung für Kolleg:innen steht unter `/hilfe`.
 
 ## Wer sieht was?
 
-| | Spielleitung | Jäger | Gejagte |
+| | Spielleitung / Aufsicht | Jäger | Gejagte |
 |---|---|---|---|
-| Position der Gejagten | immer live | nur bei Pings (letzte 4, mit Spur) | nur die eigene |
+| Position der Gejagten | immer live | nur bei Pings (letzte 4, mit Spur); bei Block nicht | nur die eigene |
 | Position der Jäger | immer live | andere Jäger-Teams live | nie |
-| Wer ist noch frei / gefangen | ✓ | ✓ | ✓ |
-| Nachricht der Spielleitung | – | ✓ | ✓ |
-| Treffpunkt | ✓ | ✓ | ✓ |
 | Verkehrsmittel der Gejagten (Option) | ✓ | ✓ (zuletzt gemeldet) | nur das eigene |
-| Notruf eines Schülers | ✓ (mit Standort) | – | – |
+| Wer ist frei / gefangen | ✓ | ✓ | ✓ |
+| Notruf, Akku, Handy-Check | ✓ | – | nur eigener |
 
 ## Datenschutz
 
-- Alle Daten liegen nur auf deinem Server (Docker-Volume `manhunt-data`, Datei `state.json`): Namen, letzte Position, Akkustand, Ping-Positionen, Verlauf. Kein Account, keine Tracker, keine Werbung.
-- Externe Verbindungen: Kartenkacheln (OpenStreetMap) und – bei Variante A – der Cloudflare-Tunnel. Die „Route“-Links öffnen Google Maps nur, wenn jemand darauf tippt (mit dem Ziel, nicht dem eigenen Standort).
-- **Automatisches Löschen:** Räume samt allen Standortdaten werden `AUTO_DELETE_DAYS` Tage (Standard 7) nach der letzten Aktivität gelöscht; laufende Spiele nie. Das Löschdatum steht in der Raumliste. Gelöschte Räume werden sofort auch aus der Datei entfernt.
-- Früher löschen: Raum löschen (gedrückt halten) oder alles entfernen mit `docker compose down -v`.
-- Standortdaten Minderjähriger: Eltern vorab informieren und Einverständnis einholen (z. B. im Elternbrief zur Klassenfahrt).
+- Alle Daten liegen nur auf deinem Server (Docker-Volume `manhunt-data`): Namen, letzter Standort, Standorte zu den Pings, Akkustand, Handy-Check, Verlauf. Kein Account, keine Tracker, keine Werbung.
+- **Kartenkacheln** kommen über deinen Server (Zwischenspeicher, `TILE_PROXY=1`): Die Handys verbinden sich nicht mit OpenStreetMap, jede Kachel wird nur einmal geholt. „Route“-Links öffnen Google Maps nur auf Tippen (mit dem Ziel, nicht dem Standort).
+- **Automatisches Löschen** nach `AUTO_DELETE_DAYS` Tagen (Standard 7); Löschungen werden sofort gespeichert. Früher löschen: Raum löschen oder `docker compose down -v`.
+- Die Seite `/datenschutz` erklärt das Schülern und Eltern; `PRIVACY_CONTACT` nennt dort den Ansprechpartner.
+- Standortdaten Minderjähriger: Eltern vorab informieren und Einverständnis einholen (z. B. im Elternbrief).
 
 ## Konfiguration (`.env`)
 
 | Variable | Bedeutung |
 |---|---|
 | `ADMIN_PASSWORD` | **Pflicht.** Passwort der Spielleitung (mind. 8 Zeichen) |
-| `SUPERVISOR_PASSWORD` | optional: Passwort für eine zweite Aufsicht (mind. 8 Zeichen, anders als `ADMIN_PASSWORD`) |
-| `MANHUNT_IMAGE` | optional: anderes Image statt `ghcr.io/asamedia/manhunt-web:latest` |
-| `PUBLIC_URL` | feste Adresse für QR-Codes; leer = Adresse, über die die Admin-Seite geöffnet wurde |
-| `DOMAIN` | nur Variante B: Domain für Caddy |
+| `SUPERVISOR_PASSWORD` | Passwort für die Aufsicht (mind. 8 Zeichen, anders als `ADMIN_PASSWORD`) |
+| `COMPOSE_PROFILES` | Zusatzdienste: `caddy`, `tunnel`, `autoupdate` (kommagetrennt) |
+| `PUBLIC_URL` | feste Adresse für QR-Codes; leer = Adresse der Admin-Seite |
+| `DOMAIN` | Domain für das Caddy-Profil |
+| `PRIVACY_CONTACT` | Ansprechpartner auf der Datenschutz-Seite |
+| `AUTO_DELETE_DAYS` | Tage bis zum automatischen Löschen (Standard 7, `0` = nie) |
+| `TILE_PROXY` | Karten über den Server zwischenspeichern (Standard `1`) |
 | `MAP_CENTER` | Kartenmitte beim Öffnen, `lat,lng` (Standard: Berlin-Mitte) |
-| `AUTO_DELETE_DAYS` | Tage bis zum automatischen Löschen nach der letzten Aktivität (Standard 7, `0` = nie) |
 | `TILE_URL`, `TILE_ATTRIBUTION` | anderer Kartenanbieter |
 | `LOCAL_PORT` | lokaler Port (Standard 3000) |
+| `MANHUNT_IMAGE` | anderes Image statt `ghcr.io/asamedia/manhunt-web:latest` |
 
-## Ohne Docker
+## Entwicklung
 
 ```bash
 npm install
-ADMIN_PASSWORD=… node server.js
+npm test
+docker compose up -d --build
 ```
 
-Node.js ≥ 20. Daten landen dann in `./data`.
+`npm test` startet einen eigenen Testserver (freier Port, Testdaten, Schein-Kartenserver) und prüft Spielablauf, Rechte, Notfälle, Warnungen, Blocks, Handy-Check, Kacheln, Manifest, Export und automatisches Löschen. `docker-compose.override.yml` sorgt dafür, dass lokal aus dem Quellcode gebaut wird (`http://localhost:3000/admin`). Node.js ≥ 20.

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Manhunt – Hilfe für Spielleitung und Aufsicht</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="doc">
+    <p class="no-print"><a class="btn sm" href="/admin">← Zur Spielleitung</a></p>
+    <h1>Hilfe für Spielleitung und Aufsicht</h1>
+    <p class="lead">Die wichtigsten Handgriffe am Spieltag – zum Lesen vorab oder Ausdrucken (Browser-Menü → Drucken).</p>
+
+    <section>
+      <h2>1. Anmelden</h2>
+      <ul>
+        <li>Adresse: die Spiel-Adresse mit <strong>/admin</strong> am Ende (bekommst du von der Spielleitung).</li>
+        <li>Passwort: Die Spielleitung hat ihr eigenes, die <strong>Aufsicht</strong> ein zweites. Als Aufsicht steht oben „Aufsicht“.</li>
+        <li>Die Seite <strong>während des Spiels offen lassen</strong> und <strong>einmal antippen</strong> – sonst blockiert der Browser den Alarmton.</li>
+        <li>Tipp: Im Browser-Menü „App installieren“ bzw. „Zum Home-Bildschirm“ wählen – dann ist die Spielleitung ein Symbol auf dem Handy.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2. Die Leiste oben</h2>
+      <div class="help-box sos">
+        <strong>🚨 Rot, blinkend = NOTFALL.</strong> Ein Schüler hat den SOS-Knopf gehalten. Alarmton alle 10 Sekunden.
+        <ol>
+          <li><strong>„Gesehen“</strong> tippen – der Schüler sieht dann auf dem Handy, dass sich jemand kümmert. Der Ton hört auf.</li>
+          <li><strong>„Auf Karte“</strong> zeigt den Standort, <strong>„Route“</strong> öffnet Google Maps dorthin.</li>
+          <li>Wenn möglich anrufen (Nummer aus der Klassenliste).</li>
+          <li>Ist alles geklärt: <strong>„Erledigt“</strong>. Gibt der Schüler selbst Entwarnung, verschwindet der Notfall von allein.</li>
+        </ol>
+        Bei Lebensgefahr immer zuerst <strong>112</strong>.
+      </div>
+      <div class="help-box warn">
+        <strong>⚠ Gelb = Warnung.</strong> Ein Handy sendet seit einigen Minuten kein Signal oder ist außerhalb des Spielfelds. Kurzer Ton alle 30 Sekunden.
+        <ul>
+          <li>„Kein Signal“ heißt meistens: Display aus, Akku leer oder Funkloch (U-Bahn). Hält es länger an: nachfragen.</li>
+          <li><strong>„OK“</strong> bzw. <strong>„Alle OK“</strong> quittiert. Die Warnung kommt erst bei einem neuen Vorfall wieder.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Die Geräte-Liste</h2>
+      <ul>
+        <li><strong>Status:</strong> frei · gefangen · außerhalb · ⚠ kein Signal · 🚨 NOTFALL · Test (Probespiel).</li>
+        <li><strong>Signal / Akku:</strong> Zeit seit dem letzten Standort, GPS-Genauigkeit, Akkustand.</li>
+        <li><strong>Check ✓ / Check ⚠:</strong> Ergebnis des Handy-Checks (Standort, Display bleibt an, Ton). Bei ⚠ über <strong>⋯</strong> nachsehen, was fehlt.</li>
+        <li><strong>⋯</strong> öffnet die Details: auf der Karte zeigen, Route, <strong>Wiederbeitritts-QR</strong> (wenn ein Schüler auf ein anderes Handy wechseln muss).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>4. Die Karte</h2>
+      <ul>
+        <li><span class="badge hunter">rot</span> Jäger · <span class="badge runner">blau</span> Gejagte · grau ohne Rolle · blass = kein aktuelles Signal.</li>
+        <li>Gestrichelte Ringe = letzter Ping · gestrichelter Kreis = Spielfeld · 🏁 Treffpunkt · 🚨 Notfall.</li>
+        <li>„Alle anzeigen“ holt alle Geräte ins Bild.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>5. Nachricht an alle</h2>
+      <ul>
+        <li>Text eingeben → <strong>„An alle senden“</strong>. Erscheint auf allen Handys mit Ton.</li>
+        <li><strong>„Alle zum Treffpunkt rufen“</strong> schickt eine fertige Nachricht mit dem Treffpunkt.</li>
+        <li><strong>„Nachricht zurückziehen“</strong>, wenn sie nicht mehr gilt.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>6. Wer darf was?</h2>
+      <table>
+        <thead><tr><th></th><th>Spielleitung</th><th>Aufsicht</th></tr></thead>
+        <tbody>
+          <tr><td>Karte, Geräte, Verlauf, Auswertung sehen</td><td>✓</td><td>✓</td></tr>
+          <tr><td>Notfälle und Warnungen bearbeiten</td><td>✓</td><td>✓</td></tr>
+          <tr><td>Nachricht an alle senden</td><td>✓</td><td>✓</td></tr>
+          <tr><td>Räume anlegen, starten, beenden, löschen</td><td>✓</td><td>–</td></tr>
+          <tr><td>Rollen, Einstellungen, Geräte entfernen</td><td>✓</td><td>–</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>7. Wenn etwas nicht klappt</h2>
+      <ul>
+        <li><strong>Handy zeigt „Keine Verbindung“:</strong> Netz prüfen – die Seite versucht es von selbst weiter.</li>
+        <li><strong>Handy leer oder verloren:</strong> ⋯ → Wiederbeitritts-QR mit einem anderen Handy scannen.</li>
+        <li><strong>Standort, Display oder Ton gehen nicht:</strong> Auf dem Handy „🩺 Handy-Check“ öffnen – dort stehen Tipps für iPhone und Android.</li>
+        <li><strong>Seite hängt:</strong> neu laden – alle Daten liegen auf dem Server, es geht nichts verloren.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>8. Für die Spielleitung: Ablauf</h2>
+      <ol>
+        <li>Raum erstellen, Einstellungen setzen (Spielfeld, Treffpunkt, Notfall-Telefon), speichern.</li>
+        <li>Druckblatt beamern oder QR-Code zeigen – alle treten bei.</li>
+        <li>In der Lobby den <strong>Handy-Check</strong> abwarten, bis möglichst alle „Check ✓“ haben. Tipp: „Karte speichern“ im Handy-Check für Funklöcher.</li>
+        <li>Rollen setzen oder auslosen, überzählige Jäger-Handys abmelden lassen, Beitritt schließen.</li>
+        <li>Spiel starten. Nach dem Spiel: Auswertung ansehen, „Neue Runde“.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

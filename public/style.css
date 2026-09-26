@@ -488,6 +488,42 @@ details.round summary { cursor: pointer; }
 .transport-buttons .btn { padding: .5em .2em; font-size: .8rem; flex-direction: column; gap: .1em; white-space: normal; }
 .transport-buttons .btn span { font-size: 1.3rem; }
 
+/* Sprachumschalter */
+.lang-corner { display: flex; justify-content: flex-end; }
+.lang-toggle { font-weight: 700; letter-spacing: .04em; }
+.btn.linkish { border: 0; background: none; padding: 0; color: var(--link); text-decoration: underline; font-weight: 500; }
+.footer-links { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+
+/* Handy-Check */
+.check-card { box-shadow: none; }
+.check-item { display: flex; gap: .6rem; align-items: flex-start; padding: .45rem 0; border-top: 1px solid var(--border); }
+.check-item .check-state {
+  flex: none; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 800; font-size: .9rem;
+  background: var(--surface-2); color: var(--muted);
+}
+.check-item.ok .check-state { background: var(--ok); color: #fff; }
+.check-item.warn .check-state { background: var(--warn-solid); color: #fff; }
+.check-item.fail .check-state { background: var(--danger-solid); color: #fff; }
+.check-item .check-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
+.check-overlay #checkHost .check-card { border: 0; padding: 0; }
+
+/* Dokumentseiten (Datenschutz, Hilfe) */
+.doc { max-width: 760px; margin: 0 auto; padding: 16px 16px 48px; line-height: 1.6; }
+.doc h1 { font-size: 1.7rem; margin: 1rem 0 .5rem; }
+.doc h2 { font-size: 1.2rem; margin: 1.6rem 0 .4rem; }
+.doc .lead { font-size: 1.05rem; color: var(--muted); }
+.doc ul, .doc ol { padding-left: 1.3rem; margin: .3rem 0; }
+.doc li + li { margin-top: .3rem; }
+.doc table { margin-top: .5rem; }
+.help-box { border-radius: var(--radius); padding: .8rem 1rem; margin: .6rem 0; border: 1px solid var(--border); }
+.help-box.sos { border-color: var(--danger-solid); background: var(--danger-bg); }
+.help-box.warn { border-color: var(--warn-solid); background: var(--warn-bg); }
+@media print {
+  .doc { max-width: none; padding: 0; }
+  .help-box { break-inside: avoid; }
+}
+
 /* Druckblatt – bewusst immer hell */
 body.print-page { background: #fff; color: #111; color-scheme: light; }
 .print-toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 12px 16px; border-bottom: 1px solid #ddd; background: #f4f6f9; color: #333; }

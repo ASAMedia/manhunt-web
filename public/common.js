@@ -65,12 +65,14 @@ export const ROLE_LABEL = { hunter: 'Jäger', runner: 'Gejagt' };
 export const TRANSPORT = { U: 'U-Bahn', S: 'S-Bahn', Bus: 'Bus', Tram: 'Tram', Fuss: 'zu Fuß' };
 export const TRANSPORT_ICON = { U: '🚇', S: '🚆', Bus: '🚌', Tram: '🚊', Fuss: '🚶' };
 
-export const fmtSeconds = (sec) => (sec % 60 === 0
-  ? `${sec / 60} ${sec === 60 ? 'Minute' : 'Minuten'}`
-  : `${sec} Sekunden`);
+export function fmtSeconds(sec, lang = 'de') {
+  if (lang === 'en') return sec % 60 === 0 ? `${sec / 60} minute${sec === 60 ? '' : 's'}` : `${sec} seconds`;
+  return sec % 60 === 0 ? `${sec / 60} ${sec === 60 ? 'Minute' : 'Minuten'}` : `${sec} Sekunden`;
+}
 
 // Standardregeln aus den Einstellungen – gilt, solange die Spielleitung keinen eigenen Text hinterlegt
-export function defaultRules(s) {
+export function defaultRules(s, lang = 'de') {
+  if (lang === 'en') return defaultRulesEn(s);
   const lines = [
     'So läuft das Spiel',
     s.headStartMin > 0
@@ -82,6 +84,7 @@ export function defaultRules(s) {
   lines.push(`• Die Jäger gewinnen, wenn alle gefangen sind. Sind nach ${s.durationMin} Minuten noch Gejagte frei, gewinnen die Gejagten.`);
   if (s.zone) lines.push(`• Bleibt im Spielfeld (gestrichelter Kreis auf der Karte).${s.shrinkEnabled ? ' Es wird im Laufe des Spiels kleiner.' : ''}`);
   if (s.transportReports) lines.push('• Gejagte melden beim Einsteigen, womit sie fahren (U-Bahn, S-Bahn, Bus, Tram), und beim Aussteigen „zu Fuß“. Die Jäger sehen nur das Verkehrsmittel, nicht die Linie.');
+  if (s.blocksPerRunner) lines.push(`• Jeder Gejagte darf ${s.blocksPerRunner === 1 ? 'einmal' : `${s.blocksPerRunner}-mal`} den nächsten Ping blockieren – dann sehen die Jäger ihn bei diesem Ping nicht.`);
   lines.push('', 'Sicherheit');
   lines.push('• Immer als Gruppe zusammenbleiben. Nicht rennen auf Straßen, Bahnsteigen und Treppen. Keine Gleise betreten, keine Geschäfte oder Privatgelände.');
   lines.push('• Die Seite offen und das Display an lassen, Powerbank mitnehmen.');
@@ -90,7 +93,34 @@ export function defaultRules(s) {
   return lines.join('\n');
 }
 
-export const rulesText = (s) => s.rules?.trim() || defaultRules(s);
+function defaultRulesEn(s) {
+  const lines = [
+    'How the game works',
+    s.headStartMin > 0
+      ? `• Runners get a ${s.headStartMin}-minute head start. After that, the hunters see where the runners are every ${s.pingIntervalMin} minutes (ping). Runners never see the hunters.`
+      : `• From the start, the hunters see where the runners are every ${s.pingIntervalMin} minutes (ping). Runners never see the hunters.`,
+  ];
+  if (s.pingWarningSec) lines.push(`• You get a warning ${fmtSeconds(s.pingWarningSec, 'en')} before every ping.`);
+  lines.push('• You are caught when a hunter touches you. Then tap “I was caught” – from then on you hunt too.');
+  lines.push(`• The hunters win if everyone is caught. If runners are still free after ${s.durationMin} minutes, the runners win.`);
+  if (s.zone) lines.push(`• Stay inside the play area (dashed circle on the map).${s.shrinkEnabled ? ' It gets smaller during the game.' : ''}`);
+  if (s.transportReports) lines.push('• Runners report how they travel when boarding (U-Bahn, S-Bahn, bus, tram) and “on foot” when getting off. Hunters only see the type, not the line.');
+  if (s.blocksPerRunner) lines.push(`• Each runner may block the next ping ${s.blocksPerRunner === 1 ? 'once' : `${s.blocksPerRunner} times`} – the hunters then don’t see them at that ping.`);
+  lines.push('', 'Safety');
+  lines.push('• Always stay together as a group. Don’t run on streets, platforms or stairs. Never step onto tracks, don’t enter shops or private property.');
+  lines.push('• Keep the page open and the screen on, bring a power bank.');
+  lines.push(`• Emergency: press and hold the SOS button (top right) for 1.5 seconds${s.emergencyPhone ? ` or call the game master: ${s.emergencyPhone}` : ''}. If life is in danger: 112.`);
+  if (s.meetingPoint) lines.push(`• Meeting point: ${s.meetingPoint.label}`);
+  return lines.join('\n');
+}
+
+// Eigener Regeltext der Spielleitung hat Vorrang (bleibt in der Sprache, in der er geschrieben wurde)
+export const rulesText = (s, lang = 'de') => s.rules?.trim() || defaultRules(s, lang);
+
+// Service Worker: App-Installation, App-Hülle offline, Kartenkacheln für Funklöcher
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/sw.js').catch(() => { /* ohne Offline-Funktionen weiter */ });
+}
 export const STATUS_LABEL = { lobby: 'Lobby', running: 'Läuft', ended: 'Beendet' };
 
 export function distanceM(a, b) {

@@ -3,20 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#d13b3b">
   <title>Manhunt</title>
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="center-page">
   <main class="stack">
+    <div class="lang-corner" id="langSlot"></div>
     <h1>Manhunt</h1>
-    <p class="muted" style="text-align:center">Scanne den QR-Code der Spielleitung oder gib den Spielcode ein.</p>
+    <p class="muted" style="text-align:center" data-i18n="idx.intro">Scanne den QR-Code der Spielleitung oder gib den Spielcode ein.</p>
     <form id="codeForm" class="card stack">
-      <input id="code" class="code-input" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Spielcode" required>
-      <button class="btn primary big" type="submit">Beitreten</button>
+      <input id="code" class="code-input" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Spielcode" data-i18n-title="idx.code" required>
+      <button class="btn primary big" type="submit" data-i18n="idx.join">Beitreten</button>
     </form>
-    <a id="resume" class="btn big hidden" href="/play">Zurück zu meinem Spiel</a>
-    <p style="text-align:center"><a class="small muted" href="/admin">Spielleitung</a></p>
+    <a id="resume" class="btn big hidden" href="/play"></a>
+    <p style="text-align:center" class="small">
+      <a class="muted" href="/datenschutz" data-i18n="common.privacy">Datenschutz</a> ·
+      <a class="muted" href="/admin" data-i18n="idx.admin">Spielleitung</a>
+    </p>
   </main>
   <script type="module" src="/index.js"></script>
 </body>

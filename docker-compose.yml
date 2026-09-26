@@ -2,13 +2,14 @@
 # Das Image wird fertig von GitHub geladen (ghcr.io); lokal mit Quellcode baut
 # docker-compose.override.yml es stattdessen selbst.
 #
-# Nur App (http://127.0.0.1:3000, z. B. hinter vorhandenem Reverse Proxy):
-#   docker compose pull && docker compose up -d
-# Mit eigener Domain und automatischem HTTPS (Caddy, Ports 80/443):
-#   docker compose --profile caddy pull && docker compose --profile caddy up -d
-# Mit kostenlosem Cloudflare-Schnelltunnel (ohne Domain):
-#   docker compose --profile tunnel up -d && docker compose logs tunnel | grep trycloudflare
-# Update auf die neueste Version: gleicher Befehl wie beim Start (pull + up -d)
+# Welche Zusatzdienste laufen, steht in der .env unter COMPOSE_PROFILES, z. B.
+#   COMPOSE_PROFILES=caddy,autoupdate
+# Dann genügt immer:  docker compose pull && docker compose up -d
+#
+#   caddy       eigene Domain mit automatischem HTTPS (Ports 80/443)
+#   tunnel      kostenloser Cloudflare-Schnelltunnel ohne Domain (Adresse: docker compose logs tunnel)
+#   autoupdate  holt neue Versionen automatisch, täglich um 4 Uhr nachts
+# Ohne Profil läuft nur die App auf http://127.0.0.1:3000 (z. B. hinter einem vorhandenen Reverse Proxy).
 
 services:
   app:
@@ -23,7 +24,12 @@ services:
       TILE_URL: ${TILE_URL:-}
       TILE_ATTRIBUTION: ${TILE_ATTRIBUTION:-}
       AUTO_DELETE_DAYS: ${AUTO_DELETE_DAYS:-7}
+      PRIVACY_CONTACT: ${PRIVACY_CONTACT:-}
+      TILE_PROXY: ${TILE_PROXY:-1}
       TRUST_PROXY: "1"
+    labels:
+      # nur diesen Container automatisch aktualisieren (Profil autoupdate)
+      com.centurylinklabs.watchtower.enable: "true"
     volumes:
       - manhunt-data:/data
     ports:
@@ -51,6 +57,20 @@ services:
     command: tunnel --no-autoupdate --url http://app:3000
     depends_on:
       - app
+
+  # Automatische Updates: gepflegter Nachfolger von Watchtower (das Original ist seit 12/2025 eingestellt).
+  # Nachts, damit kein laufendes Spiel unterbrochen wird. Braucht Zugriff auf den Docker-Socket.
+  autoupdate:
+    image: nickfedor/watchtower:latest
+    profiles: ["autoupdate"]
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_SCHEDULE: "0 0 4 * * *"   # Sekunde Minute Stunde … → täglich 4:00 Uhr
+      WATCHTOWER_LABEL_ENABLE: "true"       # nur Container mit dem Label oben
+      WATCHTOWER_CLEANUP: "true"            # alte Images aufräumen
+      TZ: Europe/Berlin
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   manhunt-data:

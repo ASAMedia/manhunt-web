@@ -4,7 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Manhunt – Spielleitung</title>
+  <meta name="theme-color" content="#d13b3b">
+  <link rel="manifest" href="/manifest.webmanifest?app=admin">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -32,6 +35,7 @@
         <h1 style="margin:0">Räume</h1>
         <div class="row">
           <span class="badge supervisor-only" title="Du bist als Aufsicht angemeldet: ansehen, Notfälle bearbeiten, Nachrichten senden">Aufsicht</span>
+          <a class="btn sm" href="/hilfe" target="_blank" rel="noopener">Hilfe</a>
           <button id="logoutBtn" class="btn sm" type="button">Abmelden</button>
         </div>
       </div>
@@ -52,6 +56,7 @@
           <button id="renameRoom" class="btn sm admin-only" type="button">Umbenennen</button>
           <span id="rStatus" class="badge"></span>
           <span class="badge supervisor-only">Aufsicht</span>
+          <a class="btn sm" href="/hilfe" target="_blank" rel="noopener">Hilfe</a>
         </div>
         <div id="rTimers" class="status-line"></div>
       </div>
@@ -120,6 +125,7 @@
                 <label>Notfall-Telefon (optional)<input name="emergencyPhone" type="tel" maxlength="26" placeholder="+49 170 1234567" autocomplete="off"></label>
                 <label>Vorwarnung vor Ping (s, 0 = aus)<input name="pingWarningSec" type="number" min="0" max="600" step="15" required></label>
                 <label>Alarm ohne Signal nach (min, 0 = aus)<input name="signalAlarmMin" type="number" min="0" max="30" step="0.5" required></label>
+                <label>Blocks pro Gejagtem (0 = aus)<input name="blocksPerRunner" type="number" min="0" max="5" required></label>
               </div>
               <div class="check-row">
                 <label class="check"><input name="transportReports" type="checkbox"> Gejagte melden ihr Verkehrsmittel (U, S, Bus, Tram)</label>

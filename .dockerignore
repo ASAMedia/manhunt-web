@@ -3,5 +3,6 @@ data
 .env
 .git
 .github
+test
 *.md
 docker-compose*.yml

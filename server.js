@@ -26,6 +26,11 @@ const AUTO_DELETE_DAYS = ['', undefined].includes(process.env.AUTO_DELETE_DAYS)
 
 // Optionales zweites Passwort für eine Aufsichtsperson (sieht alles, darf aber nichts starten/löschen/einstellen)
 const SUPERVISOR_PASSWORD = process.env.SUPERVISOR_PASSWORD || '';
+// Kartenkacheln über diesen Server laden und zwischenspeichern (schont OSM, Handys sprechen nur mit uns)
+const TILE_PROXY = process.env.TILE_PROXY !== '0';
+const TILE_CACHE_DAYS = 7;
+// Wer ist für den Datenschutz ansprechbar? Erscheint auf der Datenschutz-Seite.
+const PRIVACY_CONTACT = (process.env.PRIVACY_CONTACT || '').slice(0, 300);
 
 if (ADMIN_PASSWORD.length < 8) {
   console.error('ADMIN_PASSWORD fehlt oder ist kürzer als 8 Zeichen. Bitte in .env setzen.');
@@ -187,6 +192,7 @@ function defaultSettings() {
     shrinkEnabled: false,     // Spielfeld wird bis zum Spielende kleiner
     shrinkFinalRadius: 400,
     rules: '',                // eigener Regeltext; leer = Standardregeln
+    blocksPerRunner: 1,       // so oft darf jeder Gejagte einen Ping aussetzen (0 = aus)
   };
 }
 
@@ -262,6 +268,7 @@ function applySettings(room, input) {
   if (typeof input.shrinkEnabled === 'boolean') s.shrinkEnabled = input.shrinkEnabled;
   if (input.shrinkFinalRadius != null) s.shrinkFinalRadius = clampInt(input.shrinkFinalRadius, 50, 50000) ?? s.shrinkFinalRadius;
   if (input.rules != null) s.rules = String(input.rules).replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '').trim().slice(0, 3000);
+  if (input.blocksPerRunner != null) s.blocksPerRunner = clampInt(input.blocksPerRunner, 0, 5) ?? s.blocksPerRunner;
   if (s.headStartMin >= s.durationMin) throw new HttpError(400, 'Der Vorsprung muss kürzer als die Spieldauer sein.');
   if (s.shrinkEnabled && s.zone && s.shrinkFinalRadius >= s.zone.radius) {
     throw new HttpError(400, 'Der End-Radius muss kleiner sein als der Spielfeld-Radius.');
@@ -291,6 +298,8 @@ function startGame(room) {
     p.caughtAt = null;
     p.wasRunner = p.role === 'runner';
     p.transport = null;
+    p.blocksUsed = 0;
+    p.blockArmed = false;
   }
   Object.assign(room, {
     status: 'running', startedAt: Date.now(), endedAt: null, pings: [], extraPingsUsed: 0, result: null,
@@ -328,6 +337,7 @@ function roundSummary(room) {
     })).sort((a, b) => b.survivedMin - a.survivedMin),
     hunterDevices: playersOf(room).filter((p) => p.role === 'hunter' && !p.wasRunner).length,
     pings: { regular: count('regular'), extra: count('extra'), admin: count('admin') },
+    blocks: playersOf(room).reduce((sum, p) => sum + (p.blocksUsed || 0), 0),
     emergencies: room.emergencies.filter((e) => e.at >= room.startedAt && e.at <= room.endedAt).length,
   };
 }
@@ -344,17 +354,28 @@ function backToLobby(room) {
     p.caughtAt = null;
     p.wasRunner = false;
     p.transport = null;
+    p.blocksUsed = 0;
+    p.blockArmed = false;
   }
   logEvent(room, 'Zurück in der Lobby');
 }
 
+// Ping: Positionen aller Gejagten. Wer vorher einen Block eingesetzt hat, bleibt bei genau diesem Ping unsichtbar.
 function doPing(room, kind, by) {
   const at = Date.now();
+  let blocked = 0;
   const positions = playersOf(room)
     .filter((p) => p.role === 'runner')
-    .map((p) => (p.pos
-      ? { playerId: p.id, name: p.name, lat: p.pos.lat, lng: p.pos.lng, acc: p.pos.acc, t: p.pos.t }
-      : { playerId: p.id, name: p.name, missing: true }));
+    .map((p) => {
+      if (p.blockArmed) {
+        p.blockArmed = false;
+        blocked++;
+        return { playerId: p.id, name: p.name, blocked: true };
+      }
+      return p.pos
+        ? { playerId: p.id, name: p.name, lat: p.pos.lat, lng: p.pos.lng, acc: p.pos.acc, t: p.pos.t }
+        : { playerId: p.id, name: p.name, missing: true };
+    });
   room.pings.push({ id: randomId(6), at, kind, by: by || null, positions });
   if (room.pings.length > MAX_PINGS) room.pings.splice(0, room.pings.length - MAX_PINGS);
   if (kind === 'regular') {
@@ -362,7 +383,16 @@ function doPing(room, kind, by) {
     do room.nextPingAt += iv; while (room.nextPingAt <= at);
   }
   const label = { regular: 'Ping', admin: 'Sofort-Ping (Spielleitung)', extra: `Extra-Ping von ${by}` }[kind];
-  logEvent(room, `${label}: ${positions.length} Gejagte`);
+  logEvent(room, `${label}: ${positions.length} Gejagte${blocked ? `, davon ${blocked} blockiert` : ''}`);
+}
+
+function armBlock(room, p) {
+  if (room.status !== 'running' || p.role !== 'runner') throw new HttpError(409, 'Nur Gejagte können im laufenden Spiel blocken.');
+  if (p.blockArmed) throw new HttpError(409, 'Der nächste Ping ist schon blockiert.');
+  if ((p.blocksUsed || 0) >= room.settings.blocksPerRunner) throw new HttpError(409, 'Keine Blocks mehr übrig.');
+  p.blocksUsed = (p.blocksUsed || 0) + 1;
+  p.blockArmed = true;
+  logEvent(room, `${p.name} blockiert den nächsten Ping`);
 }
 
 function catchRunner(room, p, how) {
@@ -370,6 +400,7 @@ function catchRunner(room, p, how) {
   p.role = 'hunter';
   p.caughtAt = Date.now();
   p.wasRunner = true;
+  p.blockArmed = false;
   logEvent(room, `${p.name} wurde gefangen (${how}) und ist jetzt Jäger`, p.bot);
 }
 
@@ -502,7 +533,7 @@ function simulateBots(room, dtSec) {
     if (!p.bot || !p.pos) continue;
     const speed = p.role === 'hunter' ? 1.9 : 1.5;
     if (room.status === 'running' && p.role === 'hunter' && lastPing?.positions.length && Math.random() < 0.6) {
-      const target = lastPing.positions.filter((x) => !x.missing)
+      const target = lastPing.positions.filter((x) => x.lat != null)
         .sort((a, b) => distanceM(p.pos, a) - distanceM(p.pos, b))[0];
       if (target) p.heading = bearingTo(p.pos, target);
     }
@@ -605,6 +636,7 @@ function publicPlayer(p) {
     joinedAt: p.joinedAt, lastSeen: p.lastSeen, pos: p.pos, outside: !!p.outside,
     battery: p.battery ?? null, charging: p.charging ?? null, geoError: p.geoError || null,
     bot: !!p.bot, transport: p.transport || null,
+    check: p.check || null, blocksUsed: p.blocksUsed || 0, blockArmed: !!p.blockArmed,
   };
 }
 
@@ -670,13 +702,16 @@ function playerView(room, me) {
       name: room.name, code: room.code, ...zoneView(room), meetingPoint: s.meetingPoint, emergencyPhone: s.emergencyPhone || null,
       pingIntervalMin: s.pingIntervalMin, durationMin: s.durationMin, headStartMin: s.headStartMin,
       pingWarningSec: s.pingWarningSec, transportReports: s.transportReports,
-      shrinkEnabled: s.shrinkEnabled, shrinkFinalRadius: s.shrinkFinalRadius, rules: s.rules,
+      shrinkEnabled: s.shrinkEnabled, shrinkFinalRadius: s.shrinkFinalRadius, rules: s.rules, blocksPerRunner: s.blocksPerRunner,
       ...roomTiming(room),
     },
     me: {
       id: me.id, name: me.name, role: me.role, caughtAt: me.caughtAt, outside: !!me.outside,
       emergency: emergency ? { at: emergency.at, ackAt: emergency.ackAt } : null,
       transport: me.transport || null,
+      blocksLeft: me.role === 'runner' ? Math.max(0, s.blocksPerRunner - (me.blocksUsed || 0)) : 0,
+      blockArmed: !!me.blockArmed,
+      check: me.check || null,
     },
     runners: players.filter((p) => p.role === 'runner' || p.wasRunner)
       .map((p) => ({ name: p.name, caughtAt: p.caughtAt, ...(showTransport && { transport: p.transport || null }) })),
@@ -826,8 +861,10 @@ function route(method, pattern, handler) {
 route('GET', '/api/health', () => ({ ok: true }));
 
 route('GET', '/api/config', () => ({
-  tileUrl: TILE_URL, tileAttribution: TILE_ATTRIBUTION, mapCenter: MAP_CENTER, publicUrl: PUBLIC_URL || null,
-  autoDeleteDays: AUTO_DELETE_DAYS,
+  tileUrl: TILE_PROXY ? '/tiles/{z}/{x}/{y}.png' : TILE_URL,
+  tileProxy: TILE_PROXY,
+  tileAttribution: TILE_ATTRIBUTION, mapCenter: MAP_CENTER, publicUrl: PUBLIC_URL || null,
+  autoDeleteDays: AUTO_DELETE_DAYS, privacyContact: PRIVACY_CONTACT || null,
 }));
 
 // --- Spielleitung -----------------------------------------------------------
@@ -1181,6 +1218,32 @@ route('POST', '/api/play/sos', (req) => {
   return playerView(room, p);
 });
 
+// Gejagte setzen einen Block: Beim nächsten Ping sehen die Jäger sie nicht
+route('POST', '/api/play/block', (req) => {
+  const { room, p } = authPlayer(req);
+  armBlock(room, p);
+  return playerView(room, p);
+});
+
+// Ergebnis des Handy-Checks (GPS, Display-an, Ton …) – die Spielleitung sieht es in der Geräte-Liste
+route('POST', '/api/play/check', async (req) => {
+  const { p } = authPlayer(req);
+  const b = await readJson(req);
+  const pick = (v, allowed) => (allowed.includes(v) ? v : null);
+  p.check = {
+    gps: pick(b.gps, ['ok', 'weak', 'fail']),
+    wakeLock: pick(b.wakeLock, ['ok', 'fail', 'unsupported']),
+    sound: pick(b.sound, ['ok', 'fail', 'untested']),
+    vibrate: typeof b.vibrate === 'boolean' ? b.vibrate : null,
+    battery: typeof b.battery === 'number' ? Math.min(1, Math.max(0, b.battery)) : null,
+    platform: pick(b.platform, ['ios', 'android', 'other']),
+    installed: b.installed === true,
+    at: Date.now(),
+  };
+  markDirty();
+  return { ok: true };
+});
+
 route('POST', '/api/play/sos-cancel', (req) => {
   const { room, p } = authPlayer(req);
   const e = activeEmergency(room, p.id);
@@ -1198,7 +1261,132 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
-const PAGES = { '/': 'index.html', '/admin': 'admin.html', '/play': 'play.html', '/print': 'print.html' };
+const PAGES = {
+  '/': 'index.html', '/admin': 'admin.html', '/play': 'play.html', '/print': 'print.html',
+  '/datenschutz': 'datenschutz.html', '/hilfe': 'hilfe.html',
+};
+
+// ---------------------------------------------------------------------------
+// App-Installation (Web-App-Manifest)
+// ---------------------------------------------------------------------------
+
+// Spieler bekommen ein Manifest mit ihrem Wiederbeitritts-Link als Startadresse: Auf dem iPhone hat die
+// installierte App einen eigenen Speicher und wüsste sonst nicht, in welchem Spiel man ist.
+function manifest(url) {
+  const r = url.searchParams.get('r');
+  const admin = url.searchParams.get('app') === 'admin';
+  const start = admin ? '/admin' : (r && /^[A-Za-z0-9_-]{10,64}$/.test(r) ? `/r/${r}` : '/');
+  return {
+    id: admin ? '/admin' : '/play',
+    name: admin ? 'Manhunt – Spielleitung' : 'Manhunt',
+    short_name: admin ? 'Spielleitung' : 'Manhunt',
+    start_url: start,
+    scope: '/',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#0f1216',
+    theme_color: '#d13b3b',
+    lang: 'de',
+    icons: [
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Kartenkacheln: Zwischenspeicher auf diesem Server
+// ---------------------------------------------------------------------------
+// Jede Kachel wird nur einmal vom Kartenanbieter geholt (max. 2 gleichzeitig, mit eigener Kennung),
+// 7 Tage gespeichert und an alle Handys ausgeliefert. Die Handys sprechen dadurch nur mit diesem Server.
+
+const TILE_DIR = path.join(DATA_DIR, 'tiles');
+const TILE_UA = `manhunt-web/1.0 (selbst gehostetes Schulspiel${PUBLIC_URL ? `; ${PUBLIC_URL}` : ''})`;
+const tileInflight = new Map();
+const tileQueue = [];
+let tileActive = 0;
+
+const tileSlot = () => new Promise((resolve) => {
+  if (tileActive < 2) { tileActive++; resolve(); } else tileQueue.push(resolve);
+});
+function tileRelease() {
+  const next = tileQueue.shift();
+  if (next) next(); else tileActive--;
+}
+
+const tile2lng = (x, z) => (x / 2 ** z) * 360 - 180;
+const tile2lat = (y, z) => {
+  const n = Math.PI - (2 * Math.PI * y) / 2 ** z;
+  return (180 / Math.PI) * Math.atan(Math.sinh(n));
+};
+
+// Schutz vor Missbrauch als allgemeiner Kachel-Proxy: nahe Kacheln nur in der Umgebung der Spiele
+function tileAllowed(z, x, y) {
+  if (z < 10) return true;
+  const c = { lat: tile2lat(y + 0.5, z), lng: tile2lng(x + 0.5, z) };
+  const centers = [{ lat: MAP_CENTER[0], lng: MAP_CENTER[1] }, ...Object.values(state.rooms).map((r) => r.settings.zone).filter(Boolean)];
+  return centers.some((p) => distanceM(p, c) < 100000);
+}
+
+async function fetchTile(z, x, y, file) {
+  await tileSlot();
+  try {
+    const url = TILE_URL.replace('{z}', z).replace('{x}', x).replace('{y}', y).replace('{s}', 'abc'[(x + y) % 3]);
+    const res = await fetch(url, { headers: { 'User-Agent': TILE_UA }, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`Kachel-Server antwortet ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(`${file}.tmp`, buf);
+    fs.renameSync(`${file}.tmp`, file);
+    return buf;
+  } finally {
+    tileRelease();
+  }
+}
+
+async function serveTile(req, res, z, x, y) {
+  rateLimit(req, 'tiles', 1500, 60e3);
+  if (!(z >= 0 && z <= 19 && x >= 0 && x < 2 ** z && y >= 0 && y < 2 ** z)) throw new HttpError(404, 'Keine Kachel');
+  const file = path.join(TILE_DIR, String(z), String(x), `${y}.png`);
+  let stat = null;
+  try { stat = fs.statSync(file); } catch { /* noch nicht im Speicher */ }
+  let buf;
+  if (stat && Date.now() - stat.mtimeMs < TILE_CACHE_DAYS * 86400e3) {
+    buf = fs.readFileSync(file);
+  } else {
+    if (!stat && !tileAllowed(z, x, y)) throw new HttpError(404, 'Kachel außerhalb des Spielgebiets');
+    const key = `${z}/${x}/${y}`;
+    try {
+      if (!tileInflight.has(key)) tileInflight.set(key, fetchTile(z, x, y, file).finally(() => tileInflight.delete(key)));
+      buf = await tileInflight.get(key);
+    } catch (e) {
+      if (!stat) {
+        console.error(`Kachel ${key}: ${e.message}`);
+        throw new HttpError(502, 'Kachel gerade nicht verfügbar');
+      }
+      buf = fs.readFileSync(file); // eine alte Kachel ist besser als keine
+    }
+  }
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=604800' });
+  res.end(buf);
+}
+
+// Kacheln, die 30 Tage niemand mehr gebraucht hat, wieder löschen
+function cleanTiles() {
+  let files;
+  try { files = fs.readdirSync(TILE_DIR, { recursive: true }); } catch { return; }
+  const limit = Date.now() - 30 * 86400e3;
+  for (const f of files) {
+    const full = path.join(TILE_DIR, f);
+    try {
+      const st = fs.statSync(full);
+      if (st.isFile() && st.mtimeMs < limit) fs.unlinkSync(full);
+    } catch { /* schon weg */ }
+  }
+}
+setInterval(cleanTiles, 6 * 3600e3);
 
 function safeJoin(base, rel) {
   const p = path.resolve(base, rel);
@@ -1252,11 +1440,42 @@ const SECURITY_HEADERS = {
   ].join('; '),
 };
 
+// Fehlermeldungen, die Spieler sehen können – englisch, wenn die Spielerseite auf Englisch steht (X-Lang: en)
+const EN_ERRORS = {
+  'Du bist in keinem Spiel angemeldet.': 'You are not in a game.',
+  'Spiel nicht gefunden – Code prüfen.': 'Game not found – please check the code.',
+  'Der Beitritt ist geschlossen. Frag die Spielleitung.': 'Joining is closed. Ask the game master.',
+  'Bitte einen Namen eingeben.': 'Please enter a name.',
+  'Dieser Name ist schon vergeben.': 'This name is already taken.',
+  'Der Raum ist voll.': 'The game is full.',
+  'Das Spiel läuft gerade nicht.': 'The game is not running.',
+  'Nur Gejagte können gefangen werden.': 'Only runners can be caught.',
+  'Nur Jäger können Extra-Pings auslösen.': 'Only hunters can trigger extra pings.',
+  'Während des Vorsprungs gibt es keine Pings.': 'There are no pings during the head start.',
+  'Keine Extra-Pings mehr übrig.': 'No extra pings left.',
+  'Umbenennen geht nur vor dem Spiel.': 'You can only rename before the game starts.',
+  'Gejagte können das laufende Spiel nicht verlassen – melde dich bei der Spielleitung.': 'Runners cannot leave a running game – please contact the game master.',
+  'Verkehrsmittel-Meldungen sind in diesem Spiel aus.': 'Transport reports are turned off in this game.',
+  'Nur Gejagte melden im laufenden Spiel ihr Verkehrsmittel.': 'Only runners report their transport during the game.',
+  'Unbekanntes Verkehrsmittel': 'Unknown means of transport',
+  'Nur Gejagte können im laufenden Spiel blocken.': 'Only runners can block during the game.',
+  'Der nächste Ping ist schon blockiert.': 'The next ping is already blocked.',
+  'Keine Blocks mehr übrig.': 'No blocks left.',
+  'Zu viele Versuche – bitte kurz warten.': 'Too many attempts – please wait a moment.',
+  Serverfehler: 'Server error',
+};
+
 const server = http.createServer(async (req, res) => {
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
   try {
     const url = new URL(req.url, 'http://localhost');
     const pathname = decodeURIComponent(url.pathname);
+    const tile = TILE_PROXY && req.method === 'GET' && /^\/tiles\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(pathname);
+    if (tile) return await serveTile(req, res, Number(tile[1]), Number(tile[2]), Number(tile[3]));
+    if (pathname === '/manifest.webmanifest') {
+      res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(JSON.stringify(manifest(url)));
+    }
     if (!pathname.startsWith('/api/')) return serveStatic(req, res, pathname);
     for (const r of routes) {
       if (r.method !== req.method) continue;
@@ -1269,10 +1488,11 @@ const server = http.createServer(async (req, res) => {
     throw new HttpError(404, 'Unbekannter Endpunkt');
   } catch (e) {
     if (res.headersSent) return res.end();
-    if (e instanceof HttpError) return sendJson(res, e.status, { error: e.message });
+    const tr = (msg) => (req.headers['x-lang'] === 'en' && EN_ERRORS[msg]) || msg;
+    if (e instanceof HttpError) return sendJson(res, e.status, { error: tr(e.message) });
     if (e instanceof URIError) return sendJson(res, 400, { error: 'Ungültige Adresse' });
     console.error(e);
-    sendJson(res, 500, { error: 'Serverfehler' });
+    sendJson(res, 500, { error: tr('Serverfehler') });
   }
 });
 

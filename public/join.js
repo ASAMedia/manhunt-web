@@ -1,4 +1,8 @@
 import { $, api, store } from './common.js';
+import { t, applyI18n, langButton, langHeader } from './i18n.js';
+
+applyI18n();
+$('#langSlot').append(langButton());
 
 const code = location.pathname.split('/').pop().toUpperCase();
 
@@ -7,21 +11,21 @@ async function init() {
   const token = store.get('mh_token');
   if (token) {
     try {
-      const s = await api('GET', '/api/play/state', undefined, { 'X-Player-Token': token });
+      const s = await api('GET', '/api/play/state', undefined, { 'X-Player-Token': token, ...langHeader });
       if (s.room.code === code) return location.replace('/play');
     } catch { /* altes Token ungültig – neu beitreten */ }
   }
 
   let room;
   try {
-    room = await api('GET', `/api/join/${encodeURIComponent(code)}`);
+    room = await api('GET', `/api/join/${encodeURIComponent(code)}`, undefined, langHeader);
   } catch (e) {
     return showProblem(e.message);
   }
   $('#roomName').textContent = room.name;
   document.title = `Manhunt – ${room.name}`;
-  if (!room.joinOpen) return showProblem('Der Beitritt ist gerade geschlossen. Frag die Spielleitung.');
-  $('#info').textContent = 'Gib deinen Namen ein, um mitzuspielen.';
+  if (!room.joinOpen) return showProblem(t('join.closed'));
+  $('#info').textContent = t('join.enterName');
   $('#joinForm').classList.remove('hidden');
   $('#name').focus();
 }
@@ -39,7 +43,7 @@ $('#joinForm').addEventListener('submit', async (e) => {
   btn.disabled = true;
   $('#err').textContent = '';
   try {
-    const { token } = await api('POST', `/api/join/${encodeURIComponent(code)}`, { name: $('#name').value });
+    const { token } = await api('POST', `/api/join/${encodeURIComponent(code)}`, { name: $('#name').value }, langHeader);
     store.set('mh_token', token);
     location.replace('/play');
   } catch (err) {

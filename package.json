@@ -5,7 +5,8 @@
   "description": "Browserbasiertes Manhunt-/Mister-X-Spiel mit Räumen, QR-Einladung und Spielleitungs-Ansicht",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/run.mjs"
   },
   "engines": {
     "node": ">=20"
