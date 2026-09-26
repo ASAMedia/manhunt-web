@@ -1,21 +1,37 @@
-# Baut bei jedem Push auf main (und bei Tags v*) das Docker-Image und legt es in der
-# GitHub Container Registry ab: ghcr.io/<owner>/manhunt-web:latest
-# Auf dem Server reicht dann: docker compose pull && docker compose up -d
-name: Docker-Image bauen
+# Bei jedem Push auf main (und bei Tags v*): erst alle Tests, dann – nur wenn sie grün sind –
+# das Docker-Image bauen und in der GitHub Container Registry ablegen: ghcr.io/<owner>/manhunt-web:latest
+# Bei Pull Requests laufen nur die Tests. Auf dem Server reicht dann: docker compose pull && docker compose up -d
+name: Tests und Docker-Image
 
 on:
   push:
     branches: [main]
     tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  image:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  image:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
