@@ -5,7 +5,10 @@
 
 const crypto = require('node:crypto');
 const { MAP_CENTER, MAX_PINGS, MAX_PLAYERS, AUTO_DELETE_DAYS } = require('./config');
-const { HttpError, randomId, distanceM, offsetPoint, bearingTo, cleanName, cleanText, clampInt, clampNum } = require('./util');
+const {
+  HttpError, randomId, distanceM, offsetPoint, bearingTo, polygonZone, scaleZone, insideZone,
+  cleanName, cleanText, clampInt, clampNum,
+} = require('./util');
 const { state, tokenIndex, playersOf, saveState, markDirty, logEvent } = require('./store');
 
 const ROLES = new Set(['hunter', 'runner']);
@@ -81,6 +84,17 @@ function deleteRoom(room) {
   try { saveState(); } catch (e) { console.error('Speichern fehlgeschlagen:', e.message); markDirty(); }
 }
 
+// Spielfeld als Fläche: 3–60 Eckpunkte [lat, lng]; Mitte und Umkreis rechnet der Server selbst aus
+function parsePolygon(raw) {
+  if (raw.length < 3 || raw.length > 60) throw new HttpError(400, 'Eine Fläche braucht 3 bis 60 Eckpunkte.');
+  const points = raw.map((p) => [Number(p?.[0]), Number(p?.[1])]);
+  if (!points.every(([a, b]) => Math.abs(a) <= 90 && Math.abs(b) <= 180)) throw new HttpError(400, 'Ungültige Zone');
+  const zone = polygonZone(points.map(([a, b]) => [+a.toFixed(6), +b.toFixed(6)]));
+  if (zone.radius < 50) throw new HttpError(400, 'Die Fläche ist zu klein.');
+  if (zone.radius > 50000) throw new HttpError(400, 'Die Fläche ist zu groß (höchstens 50 km von der Mitte).');
+  return zone;
+}
+
 function applySettings(room, input) {
   const s = { ...room.settings };
   if (input.pingIntervalMin != null) s.pingIntervalMin = clampInt(input.pingIntervalMin, 1, 180) ?? s.pingIntervalMin;
@@ -90,6 +104,7 @@ function applySettings(room, input) {
   if ('zone' in input) {
     const z = input.zone;
     if (z === null) s.zone = null;
+    else if (Array.isArray(z?.points)) s.zone = parsePolygon(z.points);
     else {
       const lat = Number(z?.lat), lng = Number(z?.lng), radius = clampInt(z?.radius, 50, 50000);
       if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && radius)) throw new HttpError(400, 'Ungültige Zone');
@@ -119,7 +134,9 @@ function applySettings(room, input) {
   if (input.blocksPerRunner != null) s.blocksPerRunner = clampInt(input.blocksPerRunner, 0, 5) ?? s.blocksPerRunner;
   if (s.headStartMin >= s.durationMin) throw new HttpError(400, 'Der Vorsprung muss kürzer als die Spieldauer sein.');
   if (s.shrinkEnabled && s.zone && s.shrinkFinalRadius >= s.zone.radius) {
-    throw new HttpError(400, 'Der End-Radius muss kleiner sein als der Spielfeld-Radius.');
+    throw new HttpError(400, s.zone.points
+      ? `Der End-Radius muss kleiner sein als die Fläche (${s.zone.radius} m von der Mitte bis zur äußersten Ecke).`
+      : 'Der End-Radius muss kleiner sein als der Spielfeld-Radius.');
   }
   room.settings = s;
   if (room.status === 'running') schedule(room);
@@ -198,9 +215,10 @@ function roundSummary(room) {
 
 function backToLobby(room) {
   if (room.status === 'running') throw new HttpError(409, 'Erst das Spiel beenden.');
+  // Die Pings der letzten Runde bleiben bis zum nächsten Start erhalten – für das Ping-Replay am Abend
   Object.assign(room, {
     status: 'lobby', startedAt: null, huntStartsAt: null, endsAt: null, endedAt: null,
-    nextPingAt: null, result: null, pings: [], extraPingsUsed: 0,
+    nextPingAt: null, result: null, extraPingsUsed: 0,
   });
   for (const p of playersOf(room)) {
     // Gefangene sind im Spiel zu Jägern geworden – für die nächste Runde die Startrollen wiederherstellen
@@ -294,12 +312,13 @@ function currentZone(room, t = Date.now()) {
   const s = room.settings;
   if (!s.shrinkEnabled || room.status !== 'running' || !(s.shrinkFinalRadius < z.radius)) return { ...z };
   const f = Math.min(1, Math.max(0, (t - room.huntStartsAt) / (room.endsAt - room.huntStartsAt)));
-  return { ...z, radius: Math.round(z.radius - (z.radius - s.shrinkFinalRadius) * f) };
+  // Kreis: Radius kleiner; Fläche: alle Ecken gleichmäßig Richtung Mitte
+  return scaleZone(z, Math.round(z.radius - (z.radius - s.shrinkFinalRadius) * f));
 }
 
 function updateZoneFlag(room, p, log = true) {
   const z = currentZone(room);
-  const outside = !!(z && p.pos && distanceM(p.pos, z) > z.radius);
+  const outside = !!(z && p.pos && !insideZone(z, p.pos));
   if (outside !== !!p.outside) {
     p.outside = outside;
     p.outsideSince = outside ? Date.now() : null;
@@ -322,6 +341,10 @@ function roomWarnings(room, t = Date.now()) {
     }
     if (p.outside && p.outsideSince) {
       out.push({ ...base, type: 'zone', since: p.outsideSince, key: p.outsideSince, acked: p.warnAck?.zone === p.outsideSince });
+    }
+    // Akku unter 15 % (und nicht am Laden) – rechtzeitig Powerbank oder Gruppe anrufen
+    if (!p.bot && p.batteryLowSince) {
+      out.push({ ...base, type: 'battery', since: p.batteryLowSince, key: p.batteryLowSince, acked: p.warnAck?.battery === p.batteryLowSince, battery: p.battery });
     }
     // Wer mitten im Spiel beitritt, wird automatisch Jäger – die Aufsicht soll prüfen, ob das Gerät dazugehört
     if (!p.bot && p.joinedAt > room.startedAt) {
@@ -383,7 +406,7 @@ function simulateBots(room, dtSec) {
       if (target) p.heading = bearingTo(p.pos, target);
     }
     p.heading += (Math.random() - 0.5) * 50;
-    if (z && distanceM(p.pos, z) > z.radius * 0.9) p.heading = bearingTo(p.pos, z);
+    if (z && !insideZone(z, p.pos, 0.9)) p.heading = bearingTo(p.pos, z);
     p.pos = { ...offsetPoint(p.pos, speed * dtSec, p.heading), acc: 6 + Math.round(Math.random() * 10), t };
     p.lastSeen = t;
     p.battery = Math.max(0.05, p.battery - 0.00003 * dtSec);

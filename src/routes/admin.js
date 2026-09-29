@@ -162,8 +162,8 @@ route('POST', '/api/admin/rooms/:id/players/:pid/ack', async (req, res, { id, pi
   const room = getRoom(id);
   const p = getRoomPlayer(room, pid);
   const { type } = await readJson(req);
-  if (!['signal', 'zone', 'join'].includes(type)) throw new HttpError(400, 'Ungültige Warnung');
-  p.warnAck = { ...p.warnAck, [type]: { signal: p.lastSeen || 0, zone: p.outsideSince, join: p.joinedAt }[type] };
+  if (!['signal', 'zone', 'join', 'battery'].includes(type)) throw new HttpError(400, 'Ungültige Warnung');
+  p.warnAck = { ...p.warnAck, [type]: { signal: p.lastSeen || 0, zone: p.outsideSince, join: p.joinedAt, battery: p.batteryLowSince }[type] };
   markDirty();
   return { ok: true };
 });
@@ -203,6 +203,38 @@ route('PATCH', '/api/admin/rooms/:id/emergencies/:eid', async (req, res, { id, e
   if (body.resolve && !e.resolvedAt) game.resolveEmergency(room, e, 'admin');
   markDirty();
   return { ok: true };
+});
+
+// Ping-Replay für den Beamer: alle Pings der letzten bzw. laufenden Runde (keine Bewegungsspuren, keine Jäger)
+route('GET', '/api/admin/rooms/:id/replay', (req, res, { id }) => {
+  requireStaff(req);
+  const room = getRoom(id);
+  if (!room.pings.length) throw new HttpError(404, 'Für diesen Raum gibt es noch keine Pings.');
+  const s = room.settings;
+  // Zeiten und Gefangene: aus der laufenden bzw. beendeten Runde, in der Lobby aus der letzten Auswertung
+  const round = room.status === 'lobby' ? room.rounds.at(-1) : null;
+  if (room.status === 'lobby' && !round) throw new HttpError(404, 'Für diesen Raum gibt es noch keine Pings.');
+  const startedAt = round ? round.startedAt : room.startedAt;
+  const headStart = (round ? round.settings.headStartMin : s.headStartMin) * 60e3;
+  const duration = (round ? round.settings.durationMin : s.durationMin) * 60e3;
+  const runners = round
+    ? round.runners.map((r) => ({ name: r.name, caughtAt: r.caughtAt }))
+    : playersOf(room).filter((p) => p.role === 'runner' || p.wasRunner).map((p) => ({ name: p.name, caughtAt: p.caughtAt }));
+  return {
+    name: room.name,
+    roundNo: round ? round.no : room.roundNo,
+    status: room.status,
+    startedAt, huntStartsAt: startedAt + headStart, endsAt: startedAt + duration,
+    endedAt: round ? round.endedAt : room.endedAt,
+    result: round ? { winner: round.winner, reason: round.reason } : room.result,
+    zone: s.zone, shrinkFinalRadius: s.shrinkEnabled && s.zone && s.shrinkFinalRadius < s.zone.radius ? s.shrinkFinalRadius : null,
+    meetingPoint: s.meetingPoint,
+    pings: room.pings.map(({ at, kind, by, positions }) => ({
+      at, kind, by,
+      positions: positions.map((p) => (p.lat != null ? { name: p.name, lat: p.lat, lng: p.lng } : { name: p.name, blocked: !!p.blocked, missing: !!p.missing })),
+    })),
+    runners,
+  };
 });
 
 route('GET', '/api/admin/rooms/:id/export/:kind', (req, res, { id, kind }) => {

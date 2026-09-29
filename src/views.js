@@ -59,7 +59,8 @@ function adminRoom(room, role = 'admin') {
       emergency: !!activeEmergency(room, p.id),
       warnings: warnings.filter((w) => w.playerId === p.id).map((w) => ({ type: w.type, since: w.since, acked: w.acked })),
     })),
-    pings: room.pings.slice(-10),
+    pings: room.status === 'lobby' ? [] : room.pings.slice(-10),
+    replayPings: room.pings.length,
     events: room.events.slice(-100).map(({ at, text }) => ({ at, text })),
     rounds: room.rounds,
     serverTime: Date.now(),
@@ -92,11 +93,12 @@ function playerView(room, me) {
     runners: players.filter((p) => p.role === 'runner' || p.wasRunner)
       .map((p) => ({ name: p.name, caughtAt: p.caughtAt, ...(showTransport && { transport: p.transport || null }) })),
     hunterCount: players.filter((p) => p.role === 'hunter').length,
-    lastPingAt: room.pings.at(-1)?.at ?? null,
-    lastPingKind: room.pings.at(-1)?.kind ?? null,
+    lastPingAt: room.status === 'lobby' ? null : room.pings.at(-1)?.at ?? null,
+    lastPingKind: room.status === 'lobby' ? null : room.pings.at(-1)?.kind ?? null,
   };
   if (room.status === 'lobby') view.lobby = players.map((p) => p.name);
-  if (me.role === 'hunter' || room.status === 'ended') {
+  // in der Lobby keine Pings der letzten Runde (die sind nur noch fürs Replay der Spielleitung da)
+  if (room.status !== 'lobby' && (me.role === 'hunter' || room.status === 'ended')) {
     view.pings = room.pings.slice(-4);
   }
   if (me.role === 'hunter') {

@@ -1,6 +1,6 @@
 import {
   $, api, el, store, fmtCountdown, fmtTime, distanceM, createMap, labeledMarker, meetingMarker, cssVar, getConfig,
-  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone, errorContext,
+  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone, zoneBounds, errorContext,
 } from './common.js';
 import { t, lang, applyI18n, langButton, langHeader } from './i18n.js';
 
@@ -414,6 +414,8 @@ function renderAlerts() {
   if (tracking && lastPos && lastPos.acc > 100) a.push(['', t('alert.inaccurate', { acc: lastPos.acc })]);
   if (tracking && 'wakeLock' in navigator && !wakeLock) a.push(['', t('alert.wakeLock'), requestWakeLock]);
   if (tracking && !('wakeLock' in navigator)) a.push(['info', t('alert.autoLock')]);
+  // Akkustand kennen nur Android-Browser (iPhones melden ihn nicht)
+  if (battery && battery.level < 0.15 && !battery.charging) a.push(['danger', t('alert.battery', { p: Math.round(battery.level * 100) })]);
   swapIfChanged($('#alerts'), el('div', { class: 'stack' },
     a.map(([cls, text, onclick]) => el('div', { class: `alert ${cls}`, text, onclick, role: onclick ? 'button' : null }))));
 }
@@ -519,9 +521,11 @@ function buildContent() {
   if (room.zone) {
     box.append(el('p', {
       class: 'small muted',
-      text: room.zoneFinalRadius
-        ? t('zone.shrinking', { r: room.zone.radius, f: room.zoneFinalRadius })
-        : t('zone.normal', { r: room.zone.radius }),
+      text: room.zone.points
+        ? t(room.zoneFinalRadius ? 'zone.areaShrinking' : 'zone.area')
+        : room.zoneFinalRadius
+          ? t('zone.shrinking', { r: room.zone.radius, f: room.zoneFinalRadius })
+          : t('zone.normal', { r: room.zone.radius }),
     }));
   }
 
@@ -933,7 +937,7 @@ function initialView() {
   let fit = null;
   if (S.room.zone) {
     const z = S.room.zone;
-    fit = () => { map.invalidateSize({ pan: false }); map.fitBounds(L.latLng(z.lat, z.lng).toBounds(z.radius * 2)); };
+    fit = () => { map.invalidateSize({ pan: false }); map.fitBounds(zoneBounds(z)); };
   } else if (lastPos) {
     const { lat, lng } = lastPos;
     fit = () => { map.invalidateSize({ pan: false }); map.setView([lat, lng], 16); };

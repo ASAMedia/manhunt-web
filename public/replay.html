@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Ping-Replay – Manhunt</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="replay">
+  <header class="replay-head">
+    <div class="title-wrap">
+      <div class="title" id="rTitle">Ping-Replay</div>
+      <div class="subtitle" id="rSub"></div>
+    </div>
+    <div class="replay-clock" aria-live="polite">
+      <div id="rTime" class="replay-time">–</div>
+      <div id="rStep" class="replay-step"></div>
+    </div>
+  </header>
+  <main class="replay-main">
+    <div id="replayMap"></div>
+    <aside class="replay-side">
+      <div id="rBanner" class="replay-banner hidden"></div>
+      <ul id="rLegend" class="replay-legend"></ul>
+      <p class="small muted">Gezeigt werden nur die Standorte der Gejagten zu den Ping-Zeitpunkten – keine Bewegungsspuren, keine Jäger.</p>
+    </aside>
+  </main>
+  <footer class="replay-controls">
+    <button id="rFirst" class="btn" type="button" title="Zum Anfang (Pos1)" aria-label="Zum Anfang">⏮</button>
+    <button id="rPrev" class="btn" type="button" title="Einen Ping zurück (←)" aria-label="Einen Ping zurück">◀</button>
+    <button id="rPlay" class="btn primary" type="button" title="Abspielen / Pause (Leertaste)">▶ Abspielen</button>
+    <button id="rNext" class="btn" type="button" title="Einen Ping weiter (→)" aria-label="Einen Ping weiter">▶|</button>
+    <input id="rSlider" type="range" min="0" value="0" aria-label="Zeitpunkt">
+    <select id="rSpeed" aria-label="Geschwindigkeit">
+      <option value="3000">langsam</option>
+      <option value="1800" selected>normal</option>
+      <option value="900">schnell</option>
+    </select>
+    <button id="rFit" class="btn" type="button">Alles zeigen</button>
+    <button id="rFull" class="btn" type="button" title="Vollbild (F)">⛶ Vollbild</button>
+  </footer>
+  <div id="rMsg" class="overlay hidden"></div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/replay.js"></script>
+</body>
+</html>

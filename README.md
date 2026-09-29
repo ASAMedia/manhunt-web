@@ -20,7 +20,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Extra-Pings | gemeinsamer Vorrat für alle Jäger; die Spielleitung kann jederzeit einen Sofort-Ping auslösen |
 | **Blocks** | jeder Gejagte darf (einstellbar, Standard 1×) den nächsten Ping aussetzen und bleibt dabei unsichtbar |
 | Fangen | Gejagte melden sich selbst als gefangen und **werden dann Jäger**; die Spielleitung kann korrigieren |
-| Spielfeld | Kreis auf der Karte; optional **schrumpfend** bis Spielende |
+| Spielfeld | **Kreis oder frei gezeichnete Fläche** (z. B. entlang von Spree und S-Bahn-Ring); optional **schrumpfend** bis Spielende |
 | Verkehrsmittel (Option) | Mister-X-Stil: Gejagte melden U-Bahn, S-Bahn, Bus, Tram oder zu Fuß – Jäger sehen nur die Art |
 | Treffpunkt | auf der Karte mit Fußweg-Route; nach Spielende „Alle zum Treffpunkt“ |
 | Regeln | „📋 Regeln“ auf jedem Handy – Standardregeln aus den Einstellungen oder eigener Text |
@@ -33,7 +33,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | | |
 |---|---|
 | **Notfall (SOS)** | SOS-Knopf 1,5 s gedrückt halten → rote Alarmleiste mit Ton auf jeder Admin-Seite, Standort, Route; „Gesehen“ sieht der Schüler; optional Anruf-Knopf mit Notfall-Telefon |
-| **Warnungen** | gelbe Leiste, wenn ein Gerät einige Minuten kein Signal sendet oder das Spielfeld verlässt; gebündelt, quittierbar |
+| **Warnungen** | gelbe Leiste, wenn ein Gerät einige Minuten kein Signal sendet, das Spielfeld verlässt, im laufenden Spiel neu beitritt oder der **Akku unter 15 %** fällt (Android; iPhones melden den Akkustand nicht); gebündelt, quittierbar |
 | **Handy-Check** | prüft vor dem Start Standort, Display-an, Ton, Akku, Vibration mit Tipps für iPhone/Android; Ergebnis in der Geräte-Liste („Check ✓/⚠“) |
 | Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit, Akku |
 | Nachricht an alle | z. B. Spielabbruch; Schnellknopf „Alle zum Treffpunkt rufen“ |
@@ -48,6 +48,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Probespiel | Test-Geräte, die selbst über die Karte laufen – zum Ausprobieren allein |
 | **Raum kopieren** | Spielfeld, Treffpunkt, Regeln und alle Einstellungen in einen neuen Raum übernehmen (ohne Geräte) – z. B. für die zweite Klasse oder Runde |
 | Auswertung | pro Runde: wer wann gefangen wurde, Pings, Blocks, Notfälle; CSV-Export (Excel); keine Bewegungsspuren |
+| **Ping-Replay** | `/replay` – alle Pings der letzten Runde als Zeitraffer für den Beamer: eine Farbe pro Gejagtem, Blocks, Fänge, schrumpfendes Spielfeld; bis zum Start der nächsten Runde |
 | Hilfe | `/hilfe` – Kurzanleitung für Spielleitung und Aufsicht (druckbar) |
 | Datenschutz | `/datenschutz` – für Schüler und Eltern, Deutsch/Englisch, passend zur Konfiguration |
 
@@ -109,12 +110,12 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 ## Ablauf am Spieltag
 
 1. `/admin` öffnen, anmelden, **Raum erstellen**.
-2. **Einstellungen:** Ping-Intervall, Dauer, Vorsprung, Extra-Pings, Blocks, Notfall-Telefon, Vorwarnung, Signal-Alarm, optional Verkehrsmittel und schrumpfendes Spielfeld. Spielfeld und Treffpunkt auf der Karte wählen. Regeln prüfen („Vorschau“). **Speichern**.
+2. **Einstellungen:** Ping-Intervall, Dauer, Vorsprung, Extra-Pings, Blocks, Notfall-Telefon, Vorwarnung, Signal-Alarm, optional Verkehrsmittel und schrumpfendes Spielfeld. Spielfeld (Kreis: Mitte anklicken; Fläche: Ecken nacheinander anklicken, „Fläche fertig“) und Treffpunkt auf der Karte wählen. Regeln prüfen („Vorschau“). **Speichern**.
 3. **Druckblatt** beamern oder **QR groß anzeigen** – alle treten bei und tippen „Standort freigeben & loslegen“.
 4. **Handy-Check** abwarten, bis möglichst alle „Check ✓“ haben; dabei „Karte speichern“ für Funklöcher.
 5. **Rollen** setzen oder auslosen. Jäger-Teams behalten ein Handy, die anderen melden sich unten mit „Spiel verlassen“ ab.
 6. SOS-Knopf kurz erklären, **Beitritt schließen**, **Spiel starten**.
-7. Danach: **Auswertung** ansehen, „Neue Runde“.
+7. Danach: **Auswertung** ansehen, abends das **Ping-Replay** zeigen, „Neue Runde“.
 
 **Tipp:** Erst allein mit dem **Probespiel** ausprobieren, dann einmal mit 3–4 echten Handys – inklusive iPhone. Die Kurzanleitung für Kolleg:innen steht unter `/hilfe`.
 
@@ -123,6 +124,7 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 | | Spielleitung / Aufsicht | Jäger | Gejagte |
 |---|---|---|---|
 | Position der Gejagten | immer live | nur bei Pings (letzte 4, mit Spur); bei Block nicht | nur die eigene |
+| Ping-Replay nach dem Spiel | ✓ (z. B. am Beamer für alle) | – | – |
 | Position der Jäger | immer live | andere Jäger-Teams live | nie |
 | Verkehrsmittel der Gejagten (Option) | ✓ | ✓ (zuletzt gemeldet) | nur das eigene |
 | Wer ist frei / gefangen | ✓ | ✓ | ✓ |
@@ -130,7 +132,7 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 
 ## Datenschutz
 
-- Alle Daten liegen nur auf deinem Server (Docker-Volume `manhunt-data`): Namen, letzter Standort, Standorte zu den Pings, Akkustand, Handy-Check, Verlauf. Kein Account, keine Tracker, keine Werbung.
+- Alle Daten liegen nur auf deinem Server (Docker-Volume `manhunt-data`): Namen, letzter Standort, Standorte zu den Pings (bis zum Start der nächsten Runde), Akkustand, Handy-Check, Verlauf. Kein Account, keine Tracker, keine Werbung.
 - **Kartenkacheln** kommen über deinen Server (Zwischenspeicher, `TILE_PROXY=1`): Die Handys verbinden sich nicht mit OpenStreetMap, jede Kachel wird nur einmal geholt. „Route“-Links öffnen Google Maps nur auf Tippen (mit dem Ziel, nicht dem Standort).
 - **Automatisches Löschen** nach `AUTO_DELETE_DAYS` Tagen (Standard 7); Löschungen werden sofort gespeichert. Früher löschen: Raum löschen oder `docker compose down -v`.
 - Die Seite `/datenschutz` erklärt das Schülern und Eltern; `PRIVACY_CONTACT` nennt dort den Ansprechpartner.

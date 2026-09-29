@@ -1,7 +1,7 @@
 import {
   $, api, el, fmtCountdown, fmtAge, fmtTime, ROLE_LABEL, STATUS_LABEL, getConfig, createMap, labeledMarker, meetingMarker,
   cssVar, holdButton, isHolding, playSound, audioReady, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
-  drawZone, errorContext,
+  drawZone, zoneBounds, errorContext,
 } from './common.js';
 
 errorContext.role = 'admin';
@@ -22,8 +22,9 @@ function applyRole(r) {
 
 let map = null;
 const layers = {};
-let picking = null;       // 'zone' | 'meeting' | null – nächster Klick auf die Karte setzt diesen Punkt
-let pendingZone;          // {lat,lng} | null – Mitte des Spielfelds im Formular
+let picking = null;       // 'zone' | 'polygon' | 'meeting' | null – was ein Klick auf die Karte setzt
+let pendingZone;          // Kreis {lat,lng} | Fläche {points} | null – Spielfeld im Formular
+let drawPoints = [];      // Ecken, während eine Fläche gezeichnet wird
 let pendingMeeting;       // {lat,lng} | null – Treffpunkt im Formular
 let settingsDirty = false;
 let fitted = false;
@@ -137,7 +138,7 @@ async function pollAlerts() {
   alertTimer = setTimeout(pollAlerts, 4000);
 }
 
-const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds', join: 'Neu im laufenden Spiel' };
+const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds', join: 'Neu im laufenden Spiel', battery: 'Akku fast leer' };
 
 function renderAlertBar() {
   const bar = $('#alertBar');
@@ -202,6 +203,7 @@ function warnItem(w) {
         text: w.type === 'signal'
           ? (w.key ? `Letztes Signal ${fmtTime(w.since)} Uhr – Display aus, Akku leer oder Funkloch?` : 'Hat seit Spielstart noch nie gesendet')
           : w.type === 'join' ? `Um ${fmtTime(w.since)} Uhr beigetreten und automatisch Jäger – kennst du das Gerät? Sonst entfernen.`
+            : w.type === 'battery' ? `Akku ${w.battery != null ? Math.round(w.battery * 100) : '?'} % – Powerbank anschließen lassen, sonst ist das Gerät bald weg.`
             : `Seit ${fmtTime(w.since)} Uhr außerhalb`,
       })),
     el('div', { class: 'row' },
@@ -594,6 +596,7 @@ function playerRow(p, t) {
   if (p.outside) status.push(el('span', { class: 'badge danger', text: 'außerhalb' }));
   if (p.warnings?.some((w) => w.type === 'signal')) status.push(el('span', { class: 'badge warn', text: '⚠ kein Signal' }));
   if (p.warnings?.some((w) => w.type === 'join' && !w.acked)) status.push(el('span', { class: 'badge warn', text: '⚠ neu im Spiel' }));
+  if (p.warnings?.some((w) => w.type === 'battery')) status.push(el('span', { class: 'badge warn', text: '🪫 Akku' }));
   if (p.geoError) status.push(el('span', { class: 'badge warn', text: p.geoError }));
   if (p.blockArmed) status.push(el('span', { class: 'badge', text: '🛡 blockt nächsten Ping' }));
   // Handy-Check: in der Lobby immer, im Spiel nur wenn etwas fehlt
@@ -720,6 +723,7 @@ function renderSettings() {
   form.headStartMin.value = s.headStartMin;
   form.extraPings.value = s.extraPings;
   form.radius.value = s.zone?.radius ?? 1500;
+  form.zoneType.value = s.zone?.points ? 'polygon' : 'circle';
   form.emergencyPhone.value = s.emergencyPhone || '';
   form.meetingLabel.value = s.meetingPoint?.label ?? '';
   form.pingWarningSec.value = s.pingWarningSec;
@@ -729,7 +733,9 @@ function renderSettings() {
   form.shrinkFinalRadius.value = s.shrinkFinalRadius;
   form.rules.value = s.rules || '';
   form.blocksPerRunner.value = s.blocksPerRunner ?? 1;
-  pendingZone = s.zone ? { lat: s.zone.lat, lng: s.zone.lng } : null;
+  pendingZone = !s.zone ? null : s.zone.points ? { points: s.zone.points.map((p) => [...p]) } : { lat: s.zone.lat, lng: s.zone.lng };
+  drawPoints = [];
+  if (picking === 'polygon') picking = null;
   pendingMeeting = s.meetingPoint ? { lat: s.meetingPoint.lat, lng: s.meetingPoint.lng } : null;
   $('#setMsg').textContent = '';
   renderPointInfo();
@@ -742,9 +748,24 @@ function markDirty() {
   renderMap();
 }
 
+const isPolygon = () => form.zoneType.value === 'polygon';
+
 function renderPointInfo() {
   const fmt = (p) => `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
-  $('#zoneInfo').textContent = pendingZone ? `Mitte ${fmt(pendingZone)}` : 'Kein Spielfeld festgelegt';
+  $('#zoneInfo').textContent = picking === 'polygon'
+    ? `${drawPoints.length} ${drawPoints.length === 1 ? 'Ecke' : 'Ecken'} – weiter auf die Karte klicken, dann „Fläche fertig“ (oder die erste Ecke antippen)`
+    : pendingZone?.points ? `Fläche mit ${pendingZone.points.length} Ecken`
+      : pendingZone ? `Kreis, Mitte ${fmt(pendingZone)}` : 'Kein Spielfeld festgelegt';
+  const polygon = isPolygon();
+  form.radius.disabled = polygon;
+  $('#shrinkUnit').textContent = polygon ? 'm (Mitte bis äußerste Ecke)' : 'm Radius';
+  $('#zonePick').textContent = picking === 'zone' ? 'Jetzt auf die Karte klicken …'
+    : picking === 'polygon' ? 'Zeichnen abbrechen'
+      : polygon ? (pendingZone?.points ? 'Fläche neu zeichnen' : 'Fläche auf Karte zeichnen') : 'Spielfeld-Mitte auf Karte wählen';
+  $('#zoneUndo').classList.toggle('hidden', picking !== 'polygon');
+  $('#zoneDone').classList.toggle('hidden', picking !== 'polygon');
+  $('#zoneUndo').disabled = !drawPoints.length;
+  $('#zoneDone').disabled = drawPoints.length < 3;
   $('#meetingInfo').textContent = pendingMeeting ? `Punkt ${fmt(pendingMeeting)}` : 'Kein Treffpunkt festgelegt';
 }
 
@@ -752,20 +773,59 @@ form.addEventListener('input', markDirty);
 
 function setPicking(target) {
   picking = target;
-  $('#zonePick').textContent = target === 'zone' ? 'Jetzt auf die Karte klicken …' : 'Spielfeld-Mitte auf Karte wählen';
+  if (target === 'polygon') drawPoints = [];
+  renderPointInfo();
   $('#meetingPick').textContent = target === 'meeting' ? 'Jetzt auf die Karte klicken …' : 'Treffpunkt auf Karte wählen';
   $('#adminMap').classList.toggle('picking', !!target);
   if (target) $('#adminMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-$('#zonePick').addEventListener('click', () => setPicking(picking === 'zone' ? null : 'zone'));
-$('#zoneClear').addEventListener('click', () => { pendingZone = null; setPicking(null); markDirty(); });
+$('#zonePick').addEventListener('click', () => {
+  if (picking === 'zone' || picking === 'polygon') {
+    drawPoints = [];
+    setPicking(null);
+  } else {
+    setPicking(isPolygon() ? 'polygon' : 'zone');
+  }
+  renderMap();
+});
+$('#zoneClear').addEventListener('click', () => { pendingZone = null; drawPoints = []; setPicking(null); markDirty(); });
+$('#zoneUndo').addEventListener('click', () => { drawPoints.pop(); markDirty(); });
+$('#zoneDone').addEventListener('click', finishPolygon);
+
+function finishPolygon() {
+  if (drawPoints.length < 3) return;
+  pendingZone = { points: drawPoints };
+  drawPoints = [];
+  setPicking(null);
+  markDirty();
+}
+
+// Form wechseln: aus einer gespeicherten Fläche wird ein Kreis um dieselbe Mitte; eine Fläche muss man zeichnen
+for (const radio of form.zoneType) {
+  radio.addEventListener('change', () => {
+    if (picking === 'zone' || picking === 'polygon') setPicking(null);
+    drawPoints = [];
+    if (isPolygon() && pendingZone && !pendingZone.points) pendingZone = null;
+    if (!isPolygon() && pendingZone?.points) {
+      const c = R.settings.zone?.points ? R.settings.zone : null;
+      pendingZone = c ? { lat: c.lat, lng: c.lng } : null;
+      if (c) form.radius.value = c.radius;
+    }
+    markDirty();
+  });
+}
 $('#meetingPick').addEventListener('click', () => setPicking(picking === 'meeting' ? null : 'meeting'));
 $('#meetingClear').addEventListener('click', () => { pendingMeeting = null; setPicking(null); markDirty(); });
 
 function onMapClick(e) {
   if (!picking) return;
   const point = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
+  if (picking === 'polygon') {
+    drawPoints.push([point.lat, point.lng]);
+    markDirty();
+    return;
+  }
   if (picking === 'zone') {
     pendingZone = point;
     if (!form.radius.value) form.radius.value = 1500;
@@ -779,13 +839,17 @@ function onMapClick(e) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (picking === 'polygon') {
+    if (drawPoints.length < 3) return toast('Die Fläche braucht mindestens 3 Ecken – weiter zeichnen oder abbrechen.', true);
+    finishPolygon();
+  }
   const settings = {
     pingIntervalMin: Number(form.pingIntervalMin.value),
     durationMin: Number(form.durationMin.value),
     headStartMin: Number(form.headStartMin.value),
     extraPings: Number(form.extraPings.value),
     emergencyPhone: form.emergencyPhone.value,
-    zone: pendingZone ? { ...pendingZone, radius: Number(form.radius.value) || 1500 } : null,
+    zone: !pendingZone ? null : pendingZone.points ? { points: pendingZone.points } : { ...pendingZone, radius: Number(form.radius.value) || 1500 },
     meetingPoint: pendingMeeting ? { ...pendingMeeting, label: form.meetingLabel.value } : null,
     pingWarningSec: Number(form.pingWarningSec.value),
     signalAlarmMin: Number(form.signalAlarmMin.value),
@@ -833,11 +897,16 @@ $('#addBots').addEventListener('click', async () => {
 });
 $('#removeBots').addEventListener('click', () => act('DELETE', '/bots'));
 $('#printSheet').addEventListener('click', () => window.open(`/print#${roomId}`, '_blank'));
+$('#replayBtn').addEventListener('click', () => window.open(`/replay#${roomId}`, '_blank'));
 
 const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
 let roundsKey = '';
 function renderRounds() {
+  $('#replayBtn').disabled = !R.replayPings;
+  $('#replayBtn').title = R.replayPings
+    ? 'Alle Pings der letzten Runde als Zeitraffer – z. B. für den Beamer (bis zum Start der nächsten Runde)'
+    : 'Sobald es in einer Runde Pings gab, lassen sie sich hier als Zeitraffer abspielen';
   $('#csvRounds').href = `/api/admin/rooms/${roomId}/export/auswertung.csv`;
   $('#csvEvents').href = `/api/admin/rooms/${roomId}/export/verlauf.csv`;
   // Nur bei neuen Runden neu aufbauen, sonst klappen geöffnete Runden bei jeder Abfrage wieder zu
@@ -903,10 +972,21 @@ function renderMap() {
   layers.meeting.clearLayers();
   // aktuelles Spielfeld (schrumpft ggf. während des Spiels) und End-Kreis
   drawZone(layers.zone, R.zone, R.zoneFinalRadius);
-  if (settingsDirty && pendingZone) {
-    L.circle([pendingZone.lat, pendingZone.lng], {
-      radius: Number(form.radius.value) || 1500, color: primary, weight: 2, dashArray: '2 6', fillOpacity: 0.08, interactive: false,
-    }).addTo(layers.preview);
+  const preview = { color: primary, weight: 2, dashArray: '2 6', fillOpacity: 0.08, interactive: false };
+  if (picking === 'polygon') {
+    // Fläche wird gerade gezeichnet: Linie durch die Ecken, ein Tipp auf die erste Ecke schließt die Fläche
+    if (drawPoints.length > 1) L.polyline(drawPoints, { ...preview, fill: false }).addTo(layers.preview);
+    drawPoints.forEach((p, i) => {
+      const m = L.circleMarker(p, {
+        radius: i === 0 ? 8 : 5, color: primary, weight: 2, fillColor: '#fff', fillOpacity: 1,
+        interactive: i === 0, bubblingMouseEvents: false,
+      }).addTo(layers.preview);
+      if (i === 0) m.on('click', finishPolygon).bindTooltip('Fläche schließen', { direction: 'top' });
+    });
+  } else if (settingsDirty && pendingZone?.points) {
+    L.polygon(pendingZone.points, preview).addTo(layers.preview);
+  } else if (settingsDirty && pendingZone) {
+    L.circle([pendingZone.lat, pendingZone.lng], { radius: Number(form.radius.value) || 1500, ...preview }).addTo(layers.preview);
   }
   // Treffpunkt: gespeicherter Stand, beim Bearbeiten der Formularstand
   const mp = settingsDirty
@@ -915,7 +995,7 @@ function renderMap() {
   if (mp) meetingMarker(mp).addTo(layers.meeting);
 
   layers.pings.clearLayers();
-  const ping = R.pings.at(-1);
+  const ping = R.status === 'lobby' ? null : R.pings.at(-1);
   if (ping) {
     for (const p of ping.positions) {
       if (p.lat != null) L.circleMarker([p.lat, p.lng], { radius: 12, color: runner, weight: 2, fill: false, dashArray: '3 3', interactive: false }).addTo(layers.pings);
@@ -950,7 +1030,7 @@ function fitAll() {
   if (mp) pts.push([mp.lat, mp.lng]);
   let bounds = pts.length ? L.latLngBounds(pts) : null;
   if (z) {
-    const zb = L.latLng(z.lat, z.lng).toBounds(z.radius * 2);
+    const zb = zoneBounds(z);
     bounds = bounds ? bounds.extend(zb) : zb;
   }
   if (!bounds) return false;

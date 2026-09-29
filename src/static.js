@@ -15,7 +15,7 @@ const MIME = {
 
 const PAGES = {
   '/': 'index.html', '/admin': 'admin.html', '/play': 'play.html', '/print': 'print.html',
-  '/datenschutz': 'datenschutz.html', '/hilfe': 'hilfe.html',
+  '/datenschutz': 'datenschutz.html', '/hilfe': 'hilfe.html', '/replay': 'replay.html',
 };
 
 // Spieler bekommen ein Manifest mit ihrem Wiederbeitritts-Link als Startadresse: Auf dem iPhone hat die

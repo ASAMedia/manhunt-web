@@ -69,6 +69,11 @@ route('POST', '/api/play/pos', async (req) => {
   }
   if (Number.isFinite(b.battery)) p.battery = Math.min(1, Math.max(0, b.battery));
   if (typeof b.charging === 'boolean') p.charging = b.charging;
+  // Akku-Warnung ab unter 15 %, Entwarnung erst ab 20 % oder beim Laden (kein Flackern um die Grenze)
+  if (p.battery != null) {
+    if (p.battery < 0.15 && !p.charging) p.batteryLowSince ??= t;
+    else if (p.battery >= 0.2 || p.charging) p.batteryLowSince = null;
+  }
   markDirty();
   return { ok: true };
 });

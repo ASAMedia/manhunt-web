@@ -142,11 +142,17 @@
                 <label class="check"><input name="transportReports" type="checkbox"> Gejagte melden ihr Verkehrsmittel (U, S, Bus, Tram)</label>
                 <span class="check-group">
                   <label class="check"><input name="shrinkEnabled" type="checkbox"> Spielfeld schrumpft bis Spielende auf</label>
-                  <label class="inline-num"><input name="shrinkFinalRadius" type="number" min="50" max="50000" step="50" aria-label="End-Radius in Metern"> m Radius</label>
+                  <label class="inline-num"><input name="shrinkFinalRadius" type="number" min="50" max="50000" step="50" aria-label="End-Radius in Metern"> <span id="shrinkUnit">m Radius</span></label>
                 </span>
               </div>
               <div class="row">
+                <span class="zone-type" role="radiogroup" aria-label="Form des Spielfelds">
+                  <label class="check"><input name="zoneType" type="radio" value="circle"> Kreis</label>
+                  <label class="check"><input name="zoneType" type="radio" value="polygon"> Fläche</label>
+                </span>
                 <button id="zonePick" class="btn sm" type="button">Spielfeld-Mitte auf Karte wählen</button>
+                <button id="zoneUndo" class="btn sm hidden" type="button">Letzten Punkt entfernen</button>
+                <button id="zoneDone" class="btn sm primary hidden" type="button">Fläche fertig</button>
                 <button id="zoneClear" class="btn sm" type="button">Kein Spielfeld</button>
                 <span id="zoneInfo" class="small muted"></span>
               </div>
@@ -187,6 +193,7 @@
             <h2>Auswertung</h2>
             <div id="rounds"></div>
             <div class="row">
+              <button id="replayBtn" class="btn sm primary" type="button">▶ Ping-Replay</button>
               <a id="csvRounds" class="btn sm" download>Auswertung als CSV</a>
               <a id="csvEvents" class="btn sm" download>Verlauf als CSV</a>
             </div>

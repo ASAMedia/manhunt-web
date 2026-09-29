@@ -83,6 +83,7 @@ const DICT = {
     'alert.inaccurate': 'GPS ungenau (±{acc} m) – geh kurz ins Freie.',
     'alert.wakeLock': 'Das Display kann ausgehen – dann stoppt dein Standort. Hier tippen, damit es anbleibt.',
     'alert.autoLock': 'Stell die automatische Bildschirmsperre für die Spieldauer aus.',
+    'alert.battery': 'Akku bei {p} % – Powerbank anschließen und Helligkeit runterdrehen.',
 
     'sos.sentAt': 'Notruf gesendet um {time} Uhr.',
     'sos.acked': '✔ Die Spielleitung hat ihn um {time} Uhr gesehen und kümmert sich.',
@@ -150,6 +151,8 @@ const DICT = {
     'list.inRoom': 'Im Raum ({n})',
     'zone.shrinking': 'Spielfeld schrumpft: jetzt {r} m Radius, am Ende {f} m (innerer Kreis).',
     'zone.normal': 'Spielfeld: Kreis mit {r} m Radius (gestrichelt auf der Karte).',
+    'zone.area': 'Spielfeld: die gestrichelt umrandete Fläche auf der Karte.',
+    'zone.areaShrinking': 'Spielfeld schrumpft: die umrandete Fläche wird bis Spielende kleiner (innere Linie = Ende).',
     'leave.text': 'Dieses Handy wird nicht gebraucht, weil euer Team ein anderes nutzt? Dann hier abmelden:',
     'leave.button': 'Spiel verlassen (2 Sek. gedrückt halten)',
     'leave.hold': 'Weiter halten …',
@@ -286,6 +289,7 @@ const DICT = {
     'alert.inaccurate': 'GPS is inaccurate (±{acc} m) – step outside for a moment.',
     'alert.wakeLock': 'The screen may turn off – then your location stops. Tap here to keep it on.',
     'alert.autoLock': 'Turn off auto-lock for the duration of the game.',
+    'alert.battery': 'Battery at {p} % – plug in a power bank and turn down the brightness.',
 
     'sos.sentAt': 'Emergency call sent at {time}.',
     'sos.acked': '✔ The game master saw it at {time} and is on it.',
@@ -353,6 +357,8 @@ const DICT = {
     'list.inRoom': 'In the game ({n})',
     'zone.shrinking': 'Play area shrinks: now {r} m radius, {f} m at the end (inner circle).',
     'zone.normal': 'Play area: circle with {r} m radius (dashed on the map).',
+    'zone.area': 'Play area: the area with the dashed outline on the map.',
+    'zone.areaShrinking': 'Play area shrinks: the outlined area gets smaller until the end (inner line = end).',
     'leave.text': 'Not needed because your team uses another phone? Leave the game here:',
     'leave.button': 'Leave game (press and hold 2 sec.)',
     'leave.hold': 'Keep holding …',

@@ -119,7 +119,7 @@ export function defaultRules(s, lang = 'de') {
   if (s.pingWarningSec) lines.push(`• ${fmtSeconds(s.pingWarningSec)} vor jedem Ping kommt eine Vorwarnung.`);
   lines.push('• Gefangen ist, wer von einem Jäger berührt wird. Dann auf „Ich wurde gefangen“ tippen – ab jetzt jagst du mit.');
   lines.push(`• Die Jäger gewinnen, wenn alle gefangen sind. Sind nach ${s.durationMin} Minuten noch Gejagte frei, gewinnen die Gejagten.`);
-  if (s.zone) lines.push(`• Bleibt im Spielfeld (gestrichelter Kreis auf der Karte).${s.shrinkEnabled ? ' Es wird im Laufe des Spiels kleiner.' : ''}`);
+  if (s.zone) lines.push(`• Bleibt im Spielfeld (gestrichelte Linie auf der Karte).${s.shrinkEnabled ? ' Es wird im Laufe des Spiels kleiner.' : ''}`);
   if (s.transportReports) lines.push('• Gejagte melden beim Einsteigen, womit sie fahren (U-Bahn, S-Bahn, Bus, Tram), und beim Aussteigen „zu Fuß“. Die Jäger sehen nur das Verkehrsmittel, nicht die Linie.');
   if (s.blocksPerRunner) lines.push(`• Jeder Gejagte darf ${s.blocksPerRunner === 1 ? 'einmal' : `${s.blocksPerRunner}-mal`} den nächsten Ping blockieren – dann sehen die Jäger ihn bei diesem Ping nicht.`);
   lines.push('', 'Sicherheit');
@@ -140,7 +140,7 @@ function defaultRulesEn(s) {
   if (s.pingWarningSec) lines.push(`• You get a warning ${fmtSeconds(s.pingWarningSec, 'en')} before every ping.`);
   lines.push('• You are caught when a hunter touches you. Then tap “I was caught” – from then on you hunt too.');
   lines.push(`• The hunters win if everyone is caught. If runners are still free after ${s.durationMin} minutes, the runners win.`);
-  if (s.zone) lines.push(`• Stay inside the play area (dashed circle on the map).${s.shrinkEnabled ? ' It gets smaller during the game.' : ''}`);
+  if (s.zone) lines.push(`• Stay inside the play area (dashed line on the map).${s.shrinkEnabled ? ' It gets smaller during the game.' : ''}`);
   if (s.transportReports) lines.push('• Runners report how they travel when boarding (U-Bahn, S-Bahn, bus, tram) and “on foot” when getting off. Hunters only see the type, not the line.');
   if (s.blocksPerRunner) lines.push(`• Each runner may block the next ping ${s.blocksPerRunner === 1 ? 'once' : `${s.blocksPerRunner} times`} – the hunters then don’t see them at that ping.`);
   lines.push('', 'Safety');
@@ -195,14 +195,28 @@ export const meetingMarker = (mp) => labeledMarker([mp.lat, mp.lng], {
   color: cssVar('--ok'), radius: 10, label: `🏁 ${mp.label}`, className: 'meeting',
 });
 
-// Spielfeld zeichnen: aktueller Kreis, beim Schrumpfen zusätzlich der End-Kreis (fein gestrichelt)
+// Spielfeld: Kreis {lat,lng,radius} oder Fläche {lat,lng,radius,points} (lat/lng = Mitte, radius = Umkreis).
+// Eine Fläche schrumpft, indem alle Ecken gleichmäßig Richtung Mitte wandern.
+export function scaleZone(zone, radius) {
+  if (!zone.points) return { ...zone, radius };
+  const f = radius / zone.radius;
+  return { ...zone, radius, points: zone.points.map(([a, b]) => [zone.lat + (a - zone.lat) * f, zone.lng + (b - zone.lng) * f]) };
+}
+
+export const zoneBounds = (zone) => (zone.points ? L.latLngBounds(zone.points) : L.latLng(zone.lat, zone.lng).toBounds(zone.radius * 2));
+
+function zoneShape(zone, opts) {
+  return zone.points ? L.polygon(zone.points, opts) : L.circle([zone.lat, zone.lng], { radius: zone.radius, ...opts });
+}
+
+// Spielfeld zeichnen: aktuelles Feld, beim Schrumpfen zusätzlich das End-Feld (fein gestrichelt)
 export function drawZone(layer, zone, finalRadius, { dashed = '8 6', opacity = 0.04 } = {}) {
   layer.clearLayers();
   if (!zone) return;
   const color = cssVar('--primary');
-  L.circle([zone.lat, zone.lng], { radius: zone.radius, color, weight: 2, dashArray: dashed, fillOpacity: opacity, interactive: false }).addTo(layer);
+  zoneShape(zone, { color, weight: 2, dashArray: dashed, fillOpacity: opacity, interactive: false }).addTo(layer);
   if (finalRadius) {
-    L.circle([zone.lat, zone.lng], { radius: finalRadius, color, weight: 1.5, dashArray: '2 5', fill: false, interactive: false }).addTo(layer);
+    zoneShape(scaleZone(zone, finalRadius), { color, weight: 1.5, dashArray: '2 5', fill: false, interactive: false }).addTo(layer);
   }
 }
 

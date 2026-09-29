@@ -4,7 +4,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+# npm, yarn und corepack werden zur Laufzeit nicht gebraucht – raus damit (kleiner, weniger Angriffsfläche)
+RUN npm ci --omit=dev && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+     /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* /root/.npm
 
 COPY server.js ./
 COPY src ./src

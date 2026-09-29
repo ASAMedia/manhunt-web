@@ -30,10 +30,11 @@ function content(cfg) {
           'The game master (and a second supervisor, if any): your location live – for supervision and emergencies.',
           'Hunters: runners’ locations only at ping times; other hunter teams live.',
           'Runners: only their own location. Nobody else sees your battery level or phone check.',
+          'After the game, the game master may show the runners’ ping locations as a time-lapse (e.g. on a projector) – blocked pings stay hidden, hunters are never shown.',
         ]],
         ['Where and for how long?', [
           'Only on the game master’s server, not with third parties.',
-          'Only your latest location and the locations at ping times are stored – no complete movement tracks.',
+          'Only your latest location and the locations at ping times (until the next round starts) are stored – no complete movement tracks.',
           days
             ? `The game including all data is deleted automatically ${days} days after the last activity – or earlier by the game master.`
             : 'The game master deletes the game including all data after the game.',
@@ -72,10 +73,11 @@ function content(cfg) {
         'Die Spielleitung (und ggf. eine zweite Aufsicht): deinen Standort live – zur Aufsicht und für Notfälle.',
         'Jäger: die Standorte der Gejagten nur zu den Ping-Zeitpunkten; andere Jäger-Teams live.',
         'Gejagte: nur den eigenen Standort. Akkustand und Handy-Check sieht nur die Spielleitung.',
+        'Nach dem Spiel kann die Spielleitung die Ping-Standorte der Gejagten als Zeitraffer zeigen (z. B. am Beamer) – blockierte Pings bleiben verborgen, Jäger werden nie gezeigt.',
       ]],
       ['Wo und wie lange?', [
         'Nur auf dem Server der Spielleitung, nicht bei Dritten.',
-        'Gespeichert wird nur dein letzter Standort und die Standorte zu den Ping-Zeitpunkten – keine vollständigen Bewegungsspuren.',
+        'Gespeichert wird nur dein letzter Standort und die Standorte zu den Ping-Zeitpunkten (bis zum Start der nächsten Runde) – keine vollständigen Bewegungsspuren.',
         days
           ? `Das Spiel wird mit allen Daten ${days} Tage nach der letzten Aktivität automatisch gelöscht – oder vorher von der Spielleitung.`
           : 'Die Spielleitung löscht das Spiel mit allen Daten nach dem Spiel.',
