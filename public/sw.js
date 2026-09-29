@@ -1,7 +1,7 @@
 // Service Worker: App-Hülle für Start im Funkloch, Kartenkacheln für die Offline-Karte.
 // Spieldaten (/api/…) laufen nie über den Speicher – die müssen immer aktuell sein.
 
-const SHELL = 'mh-shell-v1';
+const SHELL = 'mh-shell-v2'; // v2: alte Speicher mit /r/<Schlüssel>-Einträgen werden beim Update gelöscht
 const TILES = 'mh-tiles-v1';
 const MAX_TILES = 3000;
 const SHELL_FILES = [
@@ -38,7 +38,10 @@ async function networkFirst(req) {
   const cache = await caches.open(SHELL);
   try {
     const res = await fetch(req);
-    if (res.ok && res.type === 'basic') cache.put(req, res.clone());
+    // /r/<Schlüssel> und /j/<Code> werden als /play bzw. gar nicht gespeichert – der Schlüssel gehört nicht in den Speicher
+    const p = new URL(req.url).pathname;
+    const key = p.startsWith('/r/') ? '/play' : p.startsWith('/j/') ? null : req;
+    if (key && res.ok && res.type === 'basic') cache.put(key, res.clone());
     return res;
   } catch {
     const hit = await cache.match(req, { ignoreSearch: true });

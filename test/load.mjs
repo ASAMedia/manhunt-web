@@ -122,7 +122,8 @@ const parseMem = (s) => {
 function cpuPercent(a, b) {
   if (!a || !b) return null;
   if (b.cpu != null) return b.cpu;
-  return Math.round(((b.cpuSec - a.cpuSec) / ((b.at - a.at) / 1000)) * 1000) / 10;
+  const v = Math.round(((b.cpuSec - a.cpuSec) / ((b.at - a.at) / 1000)) * 1000) / 10;
+  return Number.isFinite(v) ? v : null;
 }
 
 // --- Aufbau: Spielleitung legt Räume an, Handys treten bei --------------------------------

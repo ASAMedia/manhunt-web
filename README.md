@@ -20,7 +20,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Extra-Pings | gemeinsamer Vorrat für alle Jäger; die Spielleitung kann jederzeit einen Sofort-Ping auslösen |
 | **Blocks** | jeder Gejagte darf (einstellbar, Standard 1×) den nächsten Ping aussetzen und bleibt dabei unsichtbar |
 | Fangen | Gejagte melden sich selbst als gefangen und **werden dann Jäger**; die Spielleitung kann korrigieren |
-| Spielfeld | **Kreis oder frei gezeichnete Fläche** (z. B. entlang von Spree und S-Bahn-Ring); optional **schrumpfend** bis Spielende |
+| Spielfeld | **Kreis oder frei gezeichnete Fläche** (z. B. entlang von Spree und S-Bahn-Ring); optional **schrumpfend** bis Spielende – bei Flächen nur, wenn sie dabei nicht aus sich herauswandern (keine U- oder L-Formen) |
 | Verkehrsmittel (Option) | Mister-X-Stil: Gejagte melden U-Bahn, S-Bahn, Bus, Tram oder zu Fuß – Jäger sehen nur die Art |
 | Treffpunkt | auf der Karte mit Fußweg-Route; nach Spielende „Alle zum Treffpunkt“ |
 | Regeln | „📋 Regeln“ auf jedem Handy – Standardregeln aus den Einstellungen oder eigener Text |
@@ -33,7 +33,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | | |
 |---|---|
 | **Notfall (SOS)** | SOS-Knopf 1,5 s gedrückt halten → rote Alarmleiste mit Ton auf jeder Admin-Seite, Standort, Route; „Gesehen“ sieht der Schüler; optional Anruf-Knopf mit Notfall-Telefon |
-| **Warnungen** | gelbe Leiste, wenn ein Gerät einige Minuten kein Signal sendet, das Spielfeld verlässt, im laufenden Spiel neu beitritt oder der **Akku unter 15 %** fällt (Android; iPhones melden den Akkustand nicht); gebündelt, quittierbar |
+| **Warnungen** | gelbe Leiste, wenn ein Gerät einige Minuten kein Signal sendet, das Spielfeld verlässt (mit 20 m Toleranz gegen GPS-Zittern), nach dem Verteilen der Rollen neu beitritt oder der **Akku unter 15 %** fällt (Android; iPhones melden den Akkustand nicht); gebündelt, quittierbar |
 | **Handy-Check** | prüft vor dem Start Standort, Display-an, Ton, Akku, Vibration mit Tipps für iPhone/Android; Ergebnis in der Geräte-Liste („Check ✓/⚠“) |
 | Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit, Akku |
 | Nachricht an alle | z. B. Spielabbruch; Schnellknopf „Alle zum Treffpunkt rufen“ |
@@ -48,7 +48,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Probespiel | Test-Geräte, die selbst über die Karte laufen – zum Ausprobieren allein |
 | **Raum kopieren** | Spielfeld, Treffpunkt, Regeln und alle Einstellungen in einen neuen Raum übernehmen (ohne Geräte) – z. B. für die zweite Klasse oder Runde |
 | Auswertung | pro Runde: wer wann gefangen wurde, Pings, Blocks, Notfälle; CSV-Export (Excel); keine Bewegungsspuren |
-| **Ping-Replay** | `/replay` – alle Pings der letzten Runde als Zeitraffer für den Beamer: eine Farbe pro Gejagtem, Blocks, Fänge, schrumpfendes Spielfeld; bis zum Start der nächsten Runde |
+| **Ping-Replay** | `/replay` – nach Spielende alle Pings der Runde als Zeitraffer für den Beamer: eine Farbe pro Gejagtem, Blocks, Fänge, schrumpfendes Spielfeld; bis zum Start der nächsten Runde |
 | Hilfe | `/hilfe` – Kurzanleitung für Spielleitung und Aufsicht (druckbar) |
 | Datenschutz | `/datenschutz` – für Schüler und Eltern, Deutsch/Englisch, passend zur Konfiguration |
 
@@ -101,7 +101,7 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 
 > **Während der Klassenfahrt:** `autoupdate` aus `COMPOSE_PROFILES` nehmen und einmal `docker compose up -d --remove-orphans` – dann ändert sich bis zur Rückkehr nichts mehr am Server.
 
-> **Datenschutz beim Tunnel:** Beim Cloudflare-Tunnel läuft der gesamte Verkehr (inkl. Standorte) über Cloudflare. Für Schulen ist eine eigene Domain mit dem Profil `caddy` auf einem Server in der EU die bessere Wahl.
+> **Tunnel nur zum Ausprobieren:** Beim Cloudflare-Schnelltunnel läuft der gesamte Verkehr (inkl. Standorte) für Cloudflare lesbar über dessen Server (USA), und ohne Konto gibt es keinen Auftragsverarbeitungsvertrag. Für Spiele mit Schülern daher eine eigene Domain mit dem Profil `caddy` auf einem Server in der EU nutzen.
 
 > **Tunnel:** Die Adresse ändert sich bei jedem Neustart des Tunnels. Am Spieltag also nicht neu starten; falls doch, beigetretene Geräte über den Wiederbeitritts-QR (⋯ in der Geräte-Liste) wieder verbinden.
 
@@ -123,24 +123,27 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 
 | | Spielleitung / Aufsicht | Jäger | Gejagte |
 |---|---|---|---|
-| Position der Gejagten | immer live | nur bei Pings (letzte 4, mit Spur); bei Block nicht | nur die eigene |
-| Ping-Replay nach dem Spiel | ✓ (z. B. am Beamer für alle) | – | – |
-| Position der Jäger | immer live | andere Jäger-Teams live | nie |
-| Verkehrsmittel der Gejagten (Option) | ✓ | ✓ (zuletzt gemeldet) | nur das eigene |
-| Wer ist frei / gefangen | ✓ | ✓ | ✓ |
+| Position der Gejagten | immer live | nur im laufenden Spiel und nur bei Pings (letzte 4, mit Spur); bei Block nicht | nie (nur die eigene) |
+| Position der Jäger | immer live | nur im laufenden Spiel: andere Jäger-Teams live | nie |
+| Verkehrsmittel der Gejagten (Option) | ✓ | nur im laufenden Spiel (zuletzt gemeldet) | nur das eigene |
+| Nach Spielende | ✓ | keine Standorte mehr | keine Standorte |
+| Ping-Replay (erst nach Spielende) | ✓ – z. B. am Beamer für alle; Pings mit Verbindungslinien, ohne Blocks und Jäger | – | – |
+| Namen, Rollen, wer ist frei / gefangen | ✓ | ✓ | ✓ |
 | Notruf, Akku, Handy-Check | ✓ | – | nur eigener |
 
 ## Datenschutz
 
-- Alle Daten liegen nur auf deinem Server (Docker-Volume `manhunt-data`): Namen, letzter Standort, Standorte zu den Pings (bis zum Start der nächsten Runde), Akkustand, Handy-Check, Verlauf. Kein Account, keine Tracker, keine Werbung.
-- **Kartenkacheln** kommen über deinen Server (Zwischenspeicher, `TILE_PROXY=1`): Die Handys verbinden sich nicht mit OpenStreetMap, jede Kachel wird nur einmal geholt. „Route“-Links öffnen Google Maps nur auf Tippen (mit dem Ziel, nicht dem Standort).
-- **Automatisches Löschen** nach `AUTO_DELETE_DAYS` Tagen (Standard 7); Löschungen werden sofort gespeichert. Früher löschen: Raum löschen oder `docker compose down -v`.
-- Die Seite `/datenschutz` erklärt das Schülern und Eltern; `PRIVACY_CONTACT` nennt dort den Ansprechpartner.
+- **Verantwortlich ist die Schule.** In der `.env` `PRIVACY_CONTROLLER` (Schule), `PRIVACY_CONTACT` (Datenschutzbeauftragte/r) und ggf. `PRIVACY_HOSTING` (Hoster) eintragen – die Seite `/datenschutz` zeigt sie an. Sie erklärt Schülern und Eltern Zweck, Rechtsgrundlage (Einwilligung), alle Datenarten, Empfänger, Fristen und Rechte (Stand-Datum im Text).
+- Alle Daten liegen nur auf deinem Server (Docker-Volume `manhunt-data`): Namen, letzter Standort, Standorte zu den Pings (bis zum Start der nächsten Runde) und beim Notruf, Akku- und Gerätestatus, Verlauf, Auswertung. Keine Konten, keine Werbe- oder Analyse-Tracker.
+- **Wann wird der Standort angenommen?** Im laufenden Spiel immer; in der Lobby nur, solange Spielleitung oder Aufsicht den Raum geöffnet haben (die letzten 10 Minuten); nach Spielende noch 2 Stunden (Rückweg). Eine abends zu Hause geöffnete App sendet also nichts.
+- **IP-Adressen** liegen nur kurz im Arbeitsspeicher (Rate-Limits, höchstens 15 Minuten) und werden nicht protokolliert. Zugriffs-Logs des Proxys aus lassen.
+- **Kartenkacheln** kommen über deinen Server (Zwischenspeicher, `TILE_PROXY=1`): Die Handys verbinden sich nicht mit OpenStreetMap. „Route“-Links öffnen Google Maps nur auf Tippen – Google berechnet die Route dann vom Standort des Handys aus.
+- **Automatisches Löschen** nach `AUTO_DELETE_DAYS` Tagen ohne Aktivität (Standard 7); Löschungen werden sofort gespeichert. Früher löschen: Raum löschen oder `docker compose down -v`. Heruntergeladene CSV-Dateien nach der Fahrt selbst löschen.
+- **Auf den Handys** liegen Zugangsschlüssel, Spielstand und Offline-Speicher (Programm, angesehene Kartenbilder); beim Verlassen oder Entfernen löscht die Seite sie selbst. Wiederbeitritts-Links (Zugangsschlüssel) stehen nie in Adressen oder im Offline-Speicher.
 - Suchmaschinen sind ausgesperrt (`robots.txt` und `X-Robots-Tag: noindex`).
-- Nach Spielende nimmt der Server Standorte nur noch 2 Stunden an (Rückweg zum Treffpunkt) – eine später zu Hause geöffnete App sendet nichts mehr.
-- Wer während eines laufenden Spiels beitritt, wird Jäger – die Aufsicht bekommt dazu eine gelbe Warnung „Neu im laufenden Spiel“ und kann unbekannte Geräte entfernen. Am sichersten: vor dem Start **Beitritt schließen**.
-- Fehlerberichte von Handys enthalten keine Namen, Standorte oder Spieler-Links und liegen nur im Arbeitsspeicher (max. 100).
-- Standortdaten Minderjähriger: Eltern vorab informieren und Einverständnis einholen (z. B. im Elternbrief).
+- Wer nach dem Verteilen der Rollen oder während des Spiels beitritt, wird Jäger – die Aufsicht bekommt dazu eine gelbe Warnung „Neu beigetreten“ und kann unbekannte Geräte entfernen. Am sichersten: vor dem Start **Beitritt schließen**.
+- Fehlerberichte von Handys enthalten keine Namen, Standorte, Spieler-Links oder Spielcodes; sie liegen bis zum Neustart im Arbeitsspeicher (max. 100) und im Container-Log (begrenzt auf 3 × 10 MB).
+- Standortdaten Minderjähriger: Einwilligung der Eltern einholen (Elternbrief), Datenschutzbeauftragte/n der Schule vorher einbinden – eine Datenschutz-Folgenabschätzung kann nötig sein.
 
 ## Konfiguration (`.env`)
 
@@ -151,7 +154,9 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 | `COMPOSE_PROFILES` | Zusatzdienste: `caddy`, `tunnel`, `autoupdate` (kommagetrennt) |
 | `PUBLIC_URL` | feste Adresse für QR-Codes; leer = Adresse der Admin-Seite |
 | `DOMAIN` | Domain für das Caddy-Profil |
-| `PRIVACY_CONTACT` | Ansprechpartner auf der Datenschutz-Seite |
+| `PRIVACY_CONTROLLER` | Verantwortliche Schule (Name, Anschrift) für die Datenschutz-Seite |
+| `PRIVACY_CONTACT` | Datenschutz-Kontakt (Datenschutzbeauftragte/r der Schule) |
+| `PRIVACY_HOSTING` | Hosting-Anbieter und Standort des Servers (Auftragsverarbeiter), leer bei eigenem Gerät |
 | `AUTO_DELETE_DAYS` | Tage bis zum automatischen Löschen (Standard 7, `0` = nie) |
 | `TILE_PROXY` | Karten über den Server zwischenspeichern (Standard `1`) |
 | `TILE_CACHE_MAX_MB` | Obergrenze für den Kartenspeicher (Standard 1000 MB) |

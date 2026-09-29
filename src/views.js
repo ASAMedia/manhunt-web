@@ -71,8 +71,11 @@ function playerView(room, me) {
   const players = playersOf(room);
   const s = room.settings;
   const emergency = activeEmergency(room, me.id);
-  // Verkehrsmittel der Gejagten sehen nur Jäger (und alle nach Spielende)
-  const showTransport = s.transportReports && (me.role === 'hunter' || room.status === 'ended');
+  // Standorte, Pings und Verkehrsmittel anderer gibt es nur im laufenden Spiel und nur für Jäger –
+  // in der Lobby und nach Spielende bekommt kein Handy fremde Standorte (die Auflösung zeigt das Replay am Beamer)
+  const running = room.status === 'running';
+  const hunterInGame = running && me.role === 'hunter';
+  const showTransport = s.transportReports && hunterInGame;
   const view = {
     serverTime: Date.now(),
     room: {
@@ -93,15 +96,12 @@ function playerView(room, me) {
     runners: players.filter((p) => p.role === 'runner' || p.wasRunner)
       .map((p) => ({ name: p.name, caughtAt: p.caughtAt, ...(showTransport && { transport: p.transport || null }) })),
     hunterCount: players.filter((p) => p.role === 'hunter').length,
-    lastPingAt: room.status === 'lobby' ? null : room.pings.at(-1)?.at ?? null,
-    lastPingKind: room.status === 'lobby' ? null : room.pings.at(-1)?.kind ?? null,
+    lastPingAt: running ? room.pings.at(-1)?.at ?? null : null,
+    lastPingKind: running ? room.pings.at(-1)?.kind ?? null : null,
   };
   if (room.status === 'lobby') view.lobby = players.map((p) => p.name);
-  // in der Lobby keine Pings der letzten Runde (die sind nur noch fürs Replay der Spielleitung da)
-  if (room.status !== 'lobby' && (me.role === 'hunter' || room.status === 'ended')) {
+  if (hunterInGame) {
     view.pings = room.pings.slice(-4);
-  }
-  if (me.role === 'hunter') {
     view.hunters = players
       .filter((p) => p.role === 'hunter' && p.id !== me.id && p.pos)
       .map((p) => ({ name: p.name, lat: p.pos.lat, lng: p.pos.lng, t: p.pos.t }));

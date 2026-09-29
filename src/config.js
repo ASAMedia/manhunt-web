@@ -31,8 +31,10 @@ const config = {
   // Kartenkacheln über diesen Server laden und zwischenspeichern (schont OSM, Handys sprechen nur mit uns)
   TILE_PROXY: env.TILE_PROXY !== '0',
   TILE_CACHE_DAYS: 7,
-  // Wer ist für den Datenschutz ansprechbar? Erscheint auf der Datenschutz-Seite.
+  // Angaben für die Datenschutz-Seite: verantwortliche Schule, Datenschutz-Kontakt, Hosting-Anbieter
+  PRIVACY_CONTROLLER: (env.PRIVACY_CONTROLLER || '').slice(0, 300),
   PRIVACY_CONTACT: (env.PRIVACY_CONTACT || '').slice(0, 300),
+  PRIVACY_HOSTING: (env.PRIVACY_HOSTING || '').slice(0, 300),
 
   PUBLIC_DIR: path.join(ROOT, 'public'),
   LEAFLET_DIR: path.join(path.dirname(require.resolve('leaflet/package.json')), 'dist'),

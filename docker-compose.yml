@@ -39,7 +39,9 @@ services:
       TILE_URL: ${TILE_URL:-}
       TILE_ATTRIBUTION: ${TILE_ATTRIBUTION:-}
       AUTO_DELETE_DAYS: ${AUTO_DELETE_DAYS:-7}
+      PRIVACY_CONTROLLER: ${PRIVACY_CONTROLLER:-}
       PRIVACY_CONTACT: ${PRIVACY_CONTACT:-}
+      PRIVACY_HOSTING: ${PRIVACY_HOSTING:-}
       TILE_PROXY: ${TILE_PROXY:-1}
       TILE_CACHE_MAX_MB: ${TILE_CACHE_MAX_MB:-1000}
       # Die App ist nur über den Proxy (Caddy, Tunnel, eigener Reverse Proxy) erreichbar –

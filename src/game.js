@@ -6,7 +6,7 @@
 const crypto = require('node:crypto');
 const { MAP_CENTER, MAX_PINGS, MAX_PLAYERS, AUTO_DELETE_DAYS } = require('./config');
 const {
-  HttpError, randomId, distanceM, offsetPoint, bearingTo, polygonZone, scaleZone, insideZone,
+  HttpError, randomId, distanceM, offsetPoint, bearingTo, polygonZone, scaleZone, insideZone, polygonAreaM2, selfIntersects, starShaped,
   cleanName, cleanText, clampInt, clampNum,
 } = require('./util');
 const { state, tokenIndex, playersOf, saveState, markDirty, logEvent } = require('./store');
@@ -90,7 +90,8 @@ function parsePolygon(raw) {
   const points = raw.map((p) => [Number(p?.[0]), Number(p?.[1])]);
   if (!points.every(([a, b]) => Math.abs(a) <= 90 && Math.abs(b) <= 180)) throw new HttpError(400, 'Ungültige Zone');
   const zone = polygonZone(points.map(([a, b]) => [+a.toFixed(6), +b.toFixed(6)]));
-  if (zone.radius < 50) throw new HttpError(400, 'Die Fläche ist zu klein.');
+  if (selfIntersects(zone.points)) throw new HttpError(400, 'Die Linien der Fläche überkreuzen sich – bitte die Ecken der Reihe nach entlang des Rands setzen.');
+  if (zone.radius < 50 || polygonAreaM2(zone.points) < 10000) throw new HttpError(400, 'Die Fläche ist zu klein.');
   if (zone.radius > 50000) throw new HttpError(400, 'Die Fläche ist zu groß (höchstens 50 km von der Mitte).');
   return zone;
 }
@@ -133,6 +134,10 @@ function applySettings(room, input) {
   if (input.rules != null) s.rules = cleanText(input.rules, 3000);
   if (input.blocksPerRunner != null) s.blocksPerRunner = clampInt(input.blocksPerRunner, 0, 5) ?? s.blocksPerRunner;
   if (s.headStartMin >= s.durationMin) throw new HttpError(400, 'Der Vorsprung muss kürzer als die Spieldauer sein.');
+  if (s.shrinkEnabled && s.zone?.points && !starShaped(s.zone)) {
+    throw new HttpError(400, 'Diese Fläche kann nicht gleichmäßig schrumpfen: Von ihrer Mitte aus sind nicht alle Ecken „sichtbar“ (z. B. U- oder L-Form). '
+      + 'Sonst würde das Spielfeld in Gelände wandern, das nicht zur Fläche gehört. Schrumpfen ausschalten oder die Fläche einfacher (eher rund) zeichnen.');
+  }
   if (s.shrinkEnabled && s.zone && s.shrinkFinalRadius >= s.zone.radius) {
     throw new HttpError(400, s.zone.points
       ? `Der End-Radius muss kleiner sein als die Fläche (${s.zone.radius} m von der Mitte bis zur äußersten Ecke).`
@@ -177,12 +182,12 @@ function startGame(room) {
     roundNo: (room.roundNo || 0) + 1,
   });
   schedule(room);
-  logEvent(room, `Runde ${room.roundNo} gestartet: ${runners} Gejagte, ${hunters} Jäger-Geräte`);
+  logEvent(room, `Runde ${room.roundNo} gestartet: ${runners} Gejagte, ${hunters} Jäger-Geräte`, false, true);
 }
 
 function endGame(room, winner, reason) {
   Object.assign(room, { status: 'ended', endedAt: Date.now(), nextPingAt: null, result: { winner, reason } });
-  logEvent(room, reason);
+  logEvent(room, reason, false, true);
   room.rounds.push(roundSummary(room));
   if (room.rounds.length > 20) room.rounds.shift();
 }
@@ -209,6 +214,8 @@ function roundSummary(room) {
     hunterDevices: playersOf(room).filter((p) => p.role === 'hunter' && !p.wasRunner).length,
     pings: { regular: count('regular'), extra: count('extra'), admin: count('admin') },
     blocks: playersOf(room).reduce((sum, p) => sum + (p.blocksUsed || 0), 0),
+    zone: s.zone,
+    meetingPoint: s.meetingPoint,
     emergencies: room.emergencies.filter((e) => e.at >= room.startedAt && e.at <= room.endedAt).length,
   };
 }
@@ -316,9 +323,12 @@ function currentZone(room, t = Date.now()) {
   return scaleZone(z, Math.round(z.radius - (z.radius - s.shrinkFinalRadius) * f));
 }
 
+const ZONE_MARGIN_M = 20;
 function updateZoneFlag(room, p, log = true) {
   const z = currentZone(room);
-  const outside = !!(z && p.pos && !insideZone(z, p.pos));
+  // Hinaus erst 20 m jenseits des Rands, zurück erst 20 m diesseits – GPS-Zittern am Rand löst nichts aus
+  const scale = p.outside ? Math.max(0.1, (z?.radius - ZONE_MARGIN_M) / z?.radius) : (z?.radius + ZONE_MARGIN_M) / z?.radius;
+  const outside = !!(z && p.pos && !insideZone(z, p.pos, scale));
   if (outside !== !!p.outside) {
     p.outside = outside;
     p.outsideSince = outside ? Date.now() : null;
@@ -329,11 +339,17 @@ function updateZoneFlag(room, p, log = true) {
 // Warnungen für die Aufsicht: kein Signal mehr oder außerhalb des Spielfelds.
 // Eine Quittung gilt nur für genau diesen Vorfall (gleicher Zeitstempel).
 function roomWarnings(room, t = Date.now()) {
-  if (room.status !== 'running') return [];
   const out = [];
+  const running = room.status === 'running';
   const limit = room.settings.signalAlarmMin * 60e3;
   for (const p of playersOf(room)) {
     const base = { roomId: room.id, roomName: room.name, playerId: p.id, name: p.name, role: p.role, pos: p.pos };
+    // Wer nach dem Verteilen der Rollen oder während des Spiels beitritt, wird automatisch Jäger –
+    // die Aufsicht soll prüfen, ob das Gerät dazugehört (in jedem Zustand, bis quittiert)
+    if (!p.bot && (p.lateJoin || (room.startedAt && p.joinedAt > room.startedAt))) {
+      out.push({ ...base, type: 'join', since: p.joinedAt, key: p.joinedAt, acked: p.warnAck?.join === p.joinedAt });
+    }
+    if (!running) continue;
     const lastSignal = p.lastSeen || room.startedAt;
     if (limit && t - lastSignal > limit) {
       const key = p.lastSeen || 0;
@@ -345,10 +361,6 @@ function roomWarnings(room, t = Date.now()) {
     // Akku unter 15 % (und nicht am Laden) – rechtzeitig Powerbank oder Gruppe anrufen
     if (!p.bot && p.batteryLowSince) {
       out.push({ ...base, type: 'battery', since: p.batteryLowSince, key: p.batteryLowSince, acked: p.warnAck?.battery === p.batteryLowSince, battery: p.battery });
-    }
-    // Wer mitten im Spiel beitritt, wird automatisch Jäger – die Aufsicht soll prüfen, ob das Gerät dazugehört
-    if (!p.bot && p.joinedAt > room.startedAt) {
-      out.push({ ...base, type: 'join', since: p.joinedAt, key: p.joinedAt, acked: p.warnAck?.join === p.joinedAt });
     }
   }
   return out;
@@ -433,14 +445,14 @@ function raiseEmergency(room, p) {
   room.emergencies.push(e);
   // alte, erledigte Notfälle nicht endlos aufbewahren
   if (room.emergencies.length > 50) room.emergencies = room.emergencies.filter((x, i, all) => !x.resolvedAt || i >= all.length - 50);
-  logEvent(room, `NOTFALL von ${p.name}!`);
+  logEvent(room, `NOTFALL von ${p.name}!`, false, true);
   return e;
 }
 
 function resolveEmergency(room, e, by) {
   e.resolvedAt = Date.now();
   e.resolvedBy = by;
-  logEvent(room, by === 'player' ? `Entwarnung von ${e.name}` : `Notfall von ${e.name} erledigt (Spielleitung)`);
+  logEvent(room, by === 'player' ? `Entwarnung von ${e.name}` : `Notfall von ${e.name} erledigt (Spielleitung)`, false, true);
 }
 
 // --- Automatisches Löschen ----------------------------------------------------

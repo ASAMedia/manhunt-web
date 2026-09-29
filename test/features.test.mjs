@@ -82,7 +82,7 @@ export default async function features({ base, adminPass: PASS, supPass: SUP, ch
   adm = (await req('POST', `/api/admin/rooms/${room.id}/end`, undefined, A)).data;
   const round = adm.rounds.at(-1);
   check(adm.rounds.length === 1 && round.no === 1 && round.runners.map((r) => r.name).sort().join() === 'R1,R2' && round.pings.regular >= 1, 'Runde ausgewertet', round);
-  check(!JSON.stringify(adm.rounds).includes('52.5'), 'Auswertung enthält keine Koordinaten');
+  check(!JSON.stringify(adm.rounds.map(({ zone, meetingPoint, ...rest }) => rest)).includes('52.5'), 'Auswertung enthält keine Standorte von Personen (nur Spielfeld und Treffpunkt)');
   const csv = await req('GET', `/api/admin/rooms/${room.id}/export/verlauf.csv`, undefined, S);
   check(csv.status === 200 && csv.ct.includes('text/csv') && csv.data.replace(String.fromCharCode(0xfeff), '').startsWith('Zeit;Ereignis'), 'Verlauf-CSV (Aufsicht)');
   const csv2 = await req('GET', `/api/admin/rooms/${room.id}/export/auswertung.csv`, undefined, A);

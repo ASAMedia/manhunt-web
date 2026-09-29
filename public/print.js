@@ -1,4 +1,4 @@
-import { $, api, el, getConfig, rulesText, fmtSeconds } from './common.js';
+import { $, api, el, getConfig, rulesText, fmtSeconds, noBreak } from './common.js';
 
 // Druckblatt für einen Raum: /print#<raum-id> (nur für angemeldete Spielleitung/Aufsicht)
 const roomId = location.hash.slice(1);
@@ -24,7 +24,7 @@ async function init() {
     ['Spieldauer', `${s.durationMin} Minuten`],
     s.zone ? ['Spielfeld', `${s.zone.points ? 'markierte Fläche auf der Karte' : `Kreis mit ${s.zone.radius} m Radius`}${s.shrinkEnabled ? `, schrumpft bis zum Ende${s.zone.points ? '' : ` auf ${s.shrinkFinalRadius} m`}` : ''}`] : null,
     s.meetingPoint ? ['Treffpunkt', s.meetingPoint.label] : null,
-    ['Notfall', `SOS-Knopf oben rechts 1,5 Sekunden gedrückt halten${s.emergencyPhone ? ` · Spielleitung: ${s.emergencyPhone}` : ''} · Lebensgefahr: 112`],
+    ['Notfall', `SOS-Knopf oben rechts 1,5 Sekunden gedrückt halten${s.emergencyPhone ? ` · Spielleitung: ${noBreak(s.emergencyPhone)}` : ''} · Lebensgefahr: 112`],
   ].filter(Boolean);
 
   $('#sheet').replaceChildren(

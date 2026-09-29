@@ -41,9 +41,16 @@ function startAutosave() {
 }
 
 // bot = Ereignis eines Test-Geräts (zählt nicht als Aktivität fürs automatische Löschen)
-function logEvent(room, text, bot = false) {
-  room.events.push(bot ? { at: Date.now(), text, bot: true } : { at: Date.now(), text });
-  if (room.events.length > MAX_EVENTS) room.events.splice(0, room.events.length - MAX_EVENTS);
+// keep = wichtiges Ereignis (Notruf, Rundenstart/-ende) – wird beim Kürzen des Verlaufs nie verdrängt
+function logEvent(room, text, bot = false, keep = false) {
+  const e = { at: Date.now(), text };
+  if (bot) e.bot = true;
+  if (keep) e.keep = true;
+  room.events.push(e);
+  while (room.events.length > MAX_EVENTS) {
+    const i = room.events.findIndex((x) => !x.keep);
+    room.events.splice(i < 0 ? 0 : i, 1);
+  }
   markDirty();
 }
 

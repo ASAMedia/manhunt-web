@@ -58,31 +58,55 @@ function clientIp(req) {
   return req.socket.remoteAddress || '?';
 }
 
+// Für Rate-Limits zählt bei IPv6 das ganze /64-Netz – ein einzelner Anschluss hat Milliarden Adressen
+function ipKey(ip) {
+  const v4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (v4) return v4[1];
+  if (!net.isIPv6(ip)) return ip;
+  const [head, tail = ''] = ip.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const full = [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+  return `${full.slice(0, 4).map((x) => parseInt(x || '0', 16).toString(16)).join(':')}::/64`;
+}
+
 // --- Rate-Limits (pro IP und Zweck) ---------------------------------------------
 
 const buckets = new Map();
 const MAX_BUCKETS = 20000; // Obergrenze, damit viele (gefälschte) Absender den Speicher nicht füllen
 
-// Zählt Versuche unter einem beliebigen Schlüssel (IP, Spieler …)
+// Zählt Versuche unter einem beliebigen Schlüssel (IP-Netz, Spieler …).
+// Ist die Tabelle voll, fliegen abgelaufene und dann die ältesten Einträge raus – niemand wird deshalb ausgesperrt.
 function limitKey(k, max, windowMs) {
   const t = Date.now();
   let b = buckets.get(k);
   if (!b || b.reset < t) {
     if (!b && buckets.size >= MAX_BUCKETS) {
       for (const [key, x] of buckets) if (x.reset < t) buckets.delete(key);
-      if (buckets.size >= MAX_BUCKETS) throw new HttpError(429, 'Zu viele Versuche – bitte kurz warten.');
+      if (buckets.size >= MAX_BUCKETS) {
+        let drop = Math.ceil(MAX_BUCKETS / 10);
+        for (const key of buckets.keys()) { if (drop-- <= 0) break; buckets.delete(key); }
+      }
     }
+    buckets.delete(k); // neu einsortieren, damit die Reihenfolge dem Alter entspricht
     buckets.set(k, (b = { n: 0, reset: t + windowMs }));
   }
   if (++b.n > max) throw new HttpError(429, 'Zu viele Versuche – bitte kurz warten.');
 }
 
-const rateLimit = (req, key, max, windowMs) => limitKey(`${key}:${clientIp(req)}`, max, windowMs);
+const rateLimit = (req, key, max, windowMs) => limitKey(`${key}:${ipKey(clientIp(req))}`, max, windowMs);
+
+// Wie viele Treffer hat ein Schlüssel gerade (ohne mitzuzählen)?
+function countOf(req, key) {
+  const b = buckets.get(`${key}:${ipKey(clientIp(req))}`);
+  return b && b.reset >= Date.now() ? b.n : 0;
+}
 
 function startRateLimitCleanup() {
   setInterval(() => {
     const t = Date.now();
     for (const [k, b] of buckets) if (b.reset < t) buckets.delete(k);
+    for (const [sig, exp] of revoked) if (exp < t) revoked.delete(sig);
   }, 60e3);
 }
 
@@ -99,12 +123,22 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(A, B);
 }
 
+// Abgemeldete Sitzungen (Signatur → Ablaufzeit) – ein abgemeldetes Cookie gilt auch dann nicht mehr,
+// wenn es jemand kopiert hat. Nur im Arbeitsspeicher; nach einem Neustart gilt wieder die Ablaufzeit (max. 12 h).
+const revoked = new Map();
+
 // Rolle aus dem signierten Sitzungs-Cookie: 'admin' (Spielleitung), 'supervisor' (Aufsicht) oder null
 function sessionRole(req) {
   const [role, exp, sig] = (parseCookies(req).mh_admin || '').split('.');
   if (!['admin', 'supervisor'].includes(role) || !sig || !(Number(exp) > Date.now())) return null;
   if (role === 'supervisor' && !SUPERVISOR_PASSWORD) return null;
+  if (revoked.has(sig)) return null;
   return safeEqual(sig, sign(`${role}.${exp}`)) ? role : null;
+}
+
+function revokeSession(req) {
+  const [, exp, sig] = (parseCookies(req).mh_admin || '').split('.');
+  if (sig && Number(exp) > Date.now()) revoked.set(sig, Number(exp));
 }
 
 function setAdminCookie(req, res, value, maxAgeSec) {
@@ -124,9 +158,12 @@ function requireRole(req, allowSupervisor) {
 const requireAdmin = (req) => requireRole(req, false);
 const requireStaff = (req) => requireRole(req, true);
 
+// Nur für Routen der Spielleitung/Aufsicht: merkt sich dabei, dass gerade jemand den Raum im Blick hat
+// (in der Lobby nimmt der Server Standorte nur dann an)
 function getRoom(id) {
   const room = Object.hasOwn(state.rooms, id) ? state.rooms[id] : null;
   if (!room) throw new HttpError(404, 'Raum nicht gefunden');
+  room.staffSeenAt = Date.now();
   return room;
 }
 
@@ -243,8 +280,8 @@ const EN_ERRORS = {
 const translateError = (req, msg) => (req.headers['x-lang'] === 'en' && EN_ERRORS[msg]) || msg;
 
 module.exports = {
-  sendJson, readJson, isHttps, rateLimit, limitKey, startRateLimitCleanup,
-  sign, safeEqual, sessionRole, setAdminCookie, requireAdmin, requireStaff,
+  sendJson, readJson, isHttps, rateLimit, limitKey, countOf, startRateLimitCleanup,
+  sign, safeEqual, sessionRole, revokeSession, setAdminCookie, requireAdmin, requireStaff,
   getRoom, getRoomPlayer, authPlayer,
   route, dispatch, sendCsv, csvTime, fileSafe,
   setSecurityHeaders, translateError,

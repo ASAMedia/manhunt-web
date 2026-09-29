@@ -8,8 +8,8 @@ import {
 errorContext.role = 'admin';
 const roomId = location.hash.slice(1);
 
-// gut unterscheidbare Farben für die Gejagten (auch auf dem Beamer)
-const COLORS = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#0fa3b1', '#f032e6', '#9a6324', '#808000', '#000075', '#e6a100', '#469990'];
+// gut unterscheidbare Farben für die Gejagten – ohne Grün, das ist der Treffpunkt
+const COLORS = ['#e6194b', '#4363d8', '#f58231', '#911eb4', '#f032e6', '#0fa3b1', '#9a6324', '#000075', '#e6a100', '#800000', '#6a5acd', '#c71585'];
 const KIND = { regular: 'Ping', extra: 'Extra-Ping', admin: 'Sofort-Ping der Spielleitung' };
 
 let D = null;        // Daten vom Server

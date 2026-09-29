@@ -107,6 +107,9 @@ export function fmtSeconds(sec, lang = 'de') {
   return sec % 60 === 0 ? `${sec / 60} ${sec === 60 ? 'Minute' : 'Minuten'}` : `${sec} Sekunden`;
 }
 
+// Telefonnummern nie mitten in der Nummer umbrechen
+export const noBreak = (s) => String(s).replace(/ /g, ' ');
+
 // Standardregeln aus den Einstellungen – gilt, solange die Spielleitung keinen eigenen Text hinterlegt
 export function defaultRules(s, lang = 'de') {
   if (lang === 'en') return defaultRulesEn(s);
@@ -125,7 +128,7 @@ export function defaultRules(s, lang = 'de') {
   lines.push('', 'Sicherheit');
   lines.push('• Immer als Gruppe zusammenbleiben. Nicht rennen auf Straßen, Bahnsteigen und Treppen. Keine Gleise betreten, keine Geschäfte oder Privatgelände.');
   lines.push('• Die Seite offen und das Display an lassen, Powerbank mitnehmen.');
-  lines.push(`• Notfall: SOS-Knopf oben rechts 1,5 Sekunden gedrückt halten${s.emergencyPhone ? ` oder die Spielleitung anrufen: ${s.emergencyPhone}` : ''}. Bei Lebensgefahr: 112.`);
+  lines.push(`• Notfall: SOS-Knopf oben rechts 1,5 Sekunden gedrückt halten${s.emergencyPhone ? ` oder die Spielleitung anrufen: ${noBreak(s.emergencyPhone)}` : ''}. Bei Lebensgefahr: 112.`);
   if (s.meetingPoint) lines.push(`• Treffpunkt: ${s.meetingPoint.label}`);
   return lines.join('\n');
 }
@@ -146,7 +149,7 @@ function defaultRulesEn(s) {
   lines.push('', 'Safety');
   lines.push('• Always stay together as a group. Don’t run on streets, platforms or stairs. Never step onto tracks, don’t enter shops or private property.');
   lines.push('• Keep the page open and the screen on, bring a power bank.');
-  lines.push(`• Emergency: press and hold the SOS button (top right) for 1.5 seconds${s.emergencyPhone ? ` or call the game master: ${s.emergencyPhone}` : ''}. If life is in danger: 112.`);
+  lines.push(`• Emergency: press and hold the SOS button (top right) for 1.5 seconds${s.emergencyPhone ? ` or call the game master: ${noBreak(s.emergencyPhone)}` : ''}. If life is in danger: 112.`);
   if (s.meetingPoint) lines.push(`• Meeting point: ${s.meetingPoint.label}`);
   return lines.join('\n');
 }

@@ -10,7 +10,7 @@ const MAX_REPORTS = 100;
 const reports = []; // nur im Speicher – nach einem Neustart leer
 
 // Wiederbeitritts-Links enthalten das Token – das darf nicht in Log oder Liste landen
-const scrub = (s) => s.replace(/\/r\/[A-Za-z0-9_-]{10,64}/g, '/r/…').replace(/\?[^\s)]*/g, '');
+const scrub = (s) => s.replace(/\/r\/[A-Za-z0-9_-]{10,64}/g, '/r/…').replace(/\/j\/[A-Za-z0-9]{1,12}/g, '/j/…').replace(/\?[^\s)]*/g, '');
 const text = (v, max) => scrub(cleanText(v, max));
 const pick = (v, allowed) => (allowed.includes(v) ? v : null);
 

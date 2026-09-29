@@ -9,9 +9,11 @@ const { state, playersOf, markDirty, logEvent } = require('../store');
 const game = require('../game');
 const { roomSummary, adminRoom } = require('../views');
 const {
-  route, readJson, rateLimit, safeEqual, sign, sessionRole, setAdminCookie, requireAdmin, requireStaff,
+  route, readJson, rateLimit, countOf, safeEqual, sign, sessionRole, revokeSession, setAdminCookie, requireAdmin, requireStaff,
   getRoom, getRoomPlayer, sendCsv, csvTime, fileSafe,
 } = require('../http');
+
+const ROOM_NAME_MAX = 40;
 
 route('GET', '/api/admin/session', (req) => {
   const role = sessionRole(req);
@@ -25,13 +27,16 @@ route('POST', '/api/admin/login', async (req, res) => {
   rateLimit(req, 'login', 10, 5 * 60e3);
   const t = Date.now();
   if (failed.reset < t) failed = { n: 0, reset: t + 15 * 60e3 };
-  if (failed.n >= 100) throw new HttpError(429, 'Zu viele Fehlversuche – bitte in einigen Minuten erneut versuchen.');
+  // Bei sehr vielen Fehlversuchen insgesamt dürfen nur noch Absender ohne eigene Fehlversuche probieren –
+  // so sperrt ein Angriff die Spielleitung (neues Netz, richtiges Passwort) nicht aus
+  if (failed.n >= 100 && countOf(req, 'login-fail') >= 2) throw new HttpError(429, 'Zu viele Fehlversuche – bitte in einigen Minuten erneut versuchen.');
   const { password } = await readJson(req);
   const pw = typeof password === 'string' ? password : '';
   const role = safeEqual(pw, ADMIN_PASSWORD) ? 'admin'
     : SUPERVISOR_PASSWORD && safeEqual(pw, SUPERVISOR_PASSWORD) ? 'supervisor' : null;
   if (!role) {
     failed.n++;
+    rateLimit(req, 'login-fail', 1e6, 15 * 60e3); // zählt nur mit
     throw new HttpError(401, 'Falsches Passwort');
   }
   const exp = Date.now() + ADMIN_SESSION_MS;
@@ -42,6 +47,7 @@ route('POST', '/api/admin/login', async (req, res) => {
 route('POST', '/api/admin/logout', (req, res) => {
   // nur aus der eigenen Seite – sonst könnte eine fremde Seite die Spielleitung mitten im Spiel abmelden
   if (req.headers['x-requested-with'] !== 'manhunt') throw new HttpError(403, 'Ungültige Anfrage');
+  revokeSession(req); // das alte Cookie gilt danach auch dann nicht mehr, wenn es jemand kopiert hat
   setAdminCookie(req, res, '', 0);
   return { admin: false };
 });
@@ -56,8 +62,8 @@ route('POST', '/api/admin/rooms', async (req) => {
   requireAdmin(req);
   const body = await readJson(req);
   const template = body.copyFrom != null ? getRoom(String(body.copyFrom)) : null;
-  const fallback = template ? cleanName(`${template.name} (Kopie)`) : `Raum ${Object.keys(state.rooms).length + 1}`;
-  return adminRoom(game.createRoom(cleanName(body.name) || fallback, template));
+  const fallback = template ? cleanName(`${template.name} (Kopie)`, ROOM_NAME_MAX) : `Raum ${Object.keys(state.rooms).length + 1}`;
+  return adminRoom(game.createRoom(cleanName(body.name, ROOM_NAME_MAX) || fallback, template));
 });
 
 route('GET', '/api/admin/rooms/:id', (req, res, { id }) => adminRoom(getRoom(id), requireStaff(req)));
@@ -66,7 +72,7 @@ route('PATCH', '/api/admin/rooms/:id', async (req, res, { id }) => {
   requireAdmin(req);
   const room = getRoom(id);
   const body = await readJson(req);
-  if (body.name != null) room.name = cleanName(body.name) || room.name;
+  if (body.name != null) room.name = cleanName(body.name, ROOM_NAME_MAX) || room.name;
   if (typeof body.joinOpen === 'boolean') {
     room.joinOpen = body.joinOpen;
     logEvent(room, body.joinOpen ? 'Beitritt geöffnet' : 'Beitritt geschlossen');
@@ -209,31 +215,27 @@ route('PATCH', '/api/admin/rooms/:id/emergencies/:eid', async (req, res, { id, e
 route('GET', '/api/admin/rooms/:id/replay', (req, res, { id }) => {
   requireStaff(req);
   const room = getRoom(id);
-  if (!room.pings.length) throw new HttpError(404, 'Für diesen Raum gibt es noch keine Pings.');
+  if (room.status === 'running') throw new HttpError(409, 'Das Replay gibt es erst nach Spielende.');
+  const round = room.rounds.at(-1);
+  if (!room.pings.length || !round) throw new HttpError(404, 'Für diesen Raum gibt es noch keine Pings.');
   const s = room.settings;
-  // Zeiten und Gefangene: aus der laufenden bzw. beendeten Runde, in der Lobby aus der letzten Auswertung
-  const round = room.status === 'lobby' ? room.rounds.at(-1) : null;
-  if (room.status === 'lobby' && !round) throw new HttpError(404, 'Für diesen Raum gibt es noch keine Pings.');
-  const startedAt = round ? round.startedAt : room.startedAt;
-  const headStart = (round ? round.settings.headStartMin : s.headStartMin) * 60e3;
-  const duration = (round ? round.settings.durationMin : s.durationMin) * 60e3;
-  const runners = round
-    ? round.runners.map((r) => ({ name: r.name, caughtAt: r.caughtAt }))
-    : playersOf(room).filter((p) => p.role === 'runner' || p.wasRunner).map((p) => ({ name: p.name, caughtAt: p.caughtAt }));
+  // Zeiten, Gefangene, Spielfeld und Treffpunkt aus der Auswertung der letzten Runde
+  const startedAt = round.startedAt;
+  const zone = round.zone !== undefined ? round.zone : s.zone;
   return {
     name: room.name,
-    roundNo: round ? round.no : room.roundNo,
+    roundNo: round.no,
     status: room.status,
-    startedAt, huntStartsAt: startedAt + headStart, endsAt: startedAt + duration,
-    endedAt: round ? round.endedAt : room.endedAt,
-    result: round ? { winner: round.winner, reason: round.reason } : room.result,
-    zone: s.zone, shrinkFinalRadius: s.shrinkEnabled && s.zone && s.shrinkFinalRadius < s.zone.radius ? s.shrinkFinalRadius : null,
-    meetingPoint: s.meetingPoint,
+    startedAt, huntStartsAt: startedAt + round.settings.headStartMin * 60e3, endsAt: startedAt + round.settings.durationMin * 60e3,
+    endedAt: round.endedAt,
+    result: { winner: round.winner, reason: round.reason },
+    zone, shrinkFinalRadius: zone ? round.settings.shrinkFinalRadius : null,
+    meetingPoint: round.meetingPoint !== undefined ? round.meetingPoint : s.meetingPoint,
     pings: room.pings.map(({ at, kind, by, positions }) => ({
       at, kind, by,
       positions: positions.map((p) => (p.lat != null ? { name: p.name, lat: p.lat, lng: p.lng } : { name: p.name, blocked: !!p.blocked, missing: !!p.missing })),
     })),
-    runners,
+    runners: round.runners.map((r) => ({ name: r.name, caughtAt: r.caughtAt })),
   };
 });
 
@@ -260,11 +262,23 @@ route('GET', '/api/admin/rooms/:id/export/:kind', (req, res, { id, kind }) => {
 });
 
 // QR-Code als SVG für eine beliebige Spiel-URL (Spielleitung und Aufsicht)
+async function sendQr(res, text, cache) {
+  if (!/^https?:\/\/[^\s]{1,300}$/.test(text)) throw new HttpError(400, 'Ungültige URL');
+  const svg = await QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+  res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': cache });
+  res.end(svg);
+}
+
 route('GET', '/api/admin/qr.svg', async (req, res, params, url) => {
   requireStaff(req);
   const text = url.searchParams.get('text') || '';
-  if (!/^https?:\/\/[^\s]{1,300}$/.test(text)) throw new HttpError(400, 'Ungültige URL');
-  const svg = await QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
-  res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'private, max-age=300' });
-  res.end(svg);
+  // Wiederbeitritts-Links enthalten den Zugangsschlüssel – die nur per POST (nicht in Adresse, Verlauf oder Cache)
+  if (/\/r\//.test(text)) throw new HttpError(400, 'Wiederbeitritts-Links bitte per POST');
+  await sendQr(res, text, 'private, max-age=300');
+});
+
+route('POST', '/api/admin/qr', async (req, res) => {
+  requireStaff(req);
+  const { text } = await readJson(req);
+  await sendQr(res, String(text ?? ''), 'no-store');
 });

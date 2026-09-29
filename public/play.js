@@ -110,8 +110,16 @@ async function init() {
   });
 }
 
+// Beim Verlassen oder Entfernen: Zugangsschlüssel, Spielstände und Offline-Speicher (Seiten, Kartenbilder) löschen.
+// Einstellungen wie Ton, Sprache und Sonnenmodus bleiben.
+function clearGameData() {
+  for (const k of ['mh_token', 'mh_seen_ping', 'mh_msg_seen', 'mh_map_saved', 'mh_map_count', 'mh_check_sound']) store.del(k);
+  if ('caches' in window) caches.keys().then((keys) => keys.filter((k) => k.startsWith('mh-')).forEach((k) => caches.delete(k))).catch(() => {});
+}
+
 function showGone(text) {
   stopped = true;
+  clearGameData();
   if (watchId != null) navigator.geolocation.clearWatch(watchId);
   wakeLock?.release().catch(() => {});
   $('#startOverlay').classList.add('hidden');
@@ -409,7 +417,7 @@ function renderAlerts() {
   // Nach Spielende sind Standort-Hinweise nur noch Rauschen
   if (room.status === 'ended') return swapIfChanged($('#alerts'), el('div', { class: 'stack' },
     a.map(([cls, text]) => el('div', { class: `alert ${cls}`, text }))));
-  if (me.outside && room.zone) a.unshift(['danger', t('alert.outside')]);
+  if (me.outside && room.zone) a.unshift(room.status === 'lobby' ? ['info', t('alert.outsideLobby')] : ['danger', t('alert.outside')]);
   if (tracking && geoError) a.push(['danger', t('alert.geo', { error: t(`geo.${geoError}`) })]);
   if (tracking && lastPos && lastPos.acc > 100) a.push(['', t('alert.inaccurate', { acc: lastPos.acc })]);
   if (tracking && 'wakeLock' in navigator && !wakeLock) a.push(['', t('alert.wakeLock'), requestWakeLock]);

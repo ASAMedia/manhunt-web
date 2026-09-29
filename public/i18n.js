@@ -24,7 +24,7 @@ const DICT = {
     'join.otherCode': 'Anderen Code eingeben',
     'join.closed': 'Der Beitritt ist gerade geschlossen. Frag die Spielleitung.',
     'join.enterName': 'Gib deinen Namen ein, um mitzuspielen.',
-    'join.privacy': 'Während des Spiels wird dein Standort an die Spielleitung übertragen.',
+    'join.privacy': 'Dein Standort wird an die Spielleitung übertragen – während des Spiels und davor, solange die Spielleitung den Raum geöffnet hat.',
     'join.privacyLink': 'Was passiert mit meinen Daten?',
 
     'start.title': 'Bereit?',
@@ -78,6 +78,7 @@ const DICT = {
     'result.stopped': 'Die Spielleitung hat das Spiel beendet.',
 
     'alert.outside': 'Du bist außerhalb des Spielfelds! Geh sofort zurück.',
+    'alert.outsideLobby': 'Du bist noch außerhalb des Spielfelds – bis zum Start bitte hineingehen.',
     'alert.offline': 'Keine Verbindung zum Server – versuche es weiter …',
     'alert.geo': '{error}. Standort in den Browser-Einstellungen erlauben.',
     'alert.inaccurate': 'GPS ungenau (±{acc} m) – geh kurz ins Freie.',
@@ -230,7 +231,7 @@ const DICT = {
     'join.otherCode': 'Enter a different code',
     'join.closed': 'Joining is closed right now. Ask the game master.',
     'join.enterName': 'Enter your name to join.',
-    'join.privacy': 'During the game your location is shared with the game master.',
+    'join.privacy': 'Your location is shared with the game master – during the game and before it, while the game master has the room open.',
     'join.privacyLink': 'What happens to my data?',
 
     'start.title': 'Ready?',
@@ -284,6 +285,7 @@ const DICT = {
     'result.stopped': 'The game master ended the game.',
 
     'alert.outside': 'You are outside the play area! Go back right away.',
+    'alert.outsideLobby': 'You are still outside the play area – please go inside before the start.',
     'alert.offline': 'No connection to the server – still trying …',
     'alert.geo': '{error}. Allow location access in your browser settings.',
     'alert.inaccurate': 'GPS is inaccurate (±{acc} m) – step outside for a moment.',

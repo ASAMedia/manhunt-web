@@ -24,6 +24,7 @@ route('GET', '/api/config', () => ({
   tileProxy: config.TILE_PROXY,
   tileAttribution: config.TILE_ATTRIBUTION, mapCenter: config.MAP_CENTER, publicUrl: config.PUBLIC_URL || null,
   autoDeleteDays: config.AUTO_DELETE_DAYS, privacyContact: config.PRIVACY_CONTACT || null,
+  privacyController: config.PRIVACY_CONTROLLER || null, privacyHosting: config.PRIVACY_HOSTING || null,
   version: config.VERSION, build: config.BUILD,
 }));
 

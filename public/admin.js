@@ -138,7 +138,7 @@ async function pollAlerts() {
   alertTimer = setTimeout(pollAlerts, 4000);
 }
 
-const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds', join: 'Neu im laufenden Spiel', battery: 'Akku fast leer' };
+const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds', join: 'Neu beigetreten', battery: 'Akku fast leer' };
 
 function renderAlertBar() {
   const bar = $('#alertBar');
@@ -202,7 +202,7 @@ function warnItem(w) {
         class: 'small',
         text: w.type === 'signal'
           ? (w.key ? `Letztes Signal ${fmtTime(w.since)} Uhr – Display aus, Akku leer oder Funkloch?` : 'Hat seit Spielstart noch nie gesendet')
-          : w.type === 'join' ? `Um ${fmtTime(w.since)} Uhr beigetreten und automatisch Jäger – kennst du das Gerät? Sonst entfernen.`
+          : w.type === 'join' ? `Um ${fmtTime(w.since)} Uhr nach dem Verteilen der Rollen beigetreten und automatisch Jäger – kennst du das Gerät? Sonst entfernen.`
             : w.type === 'battery' ? `Akku ${w.battery != null ? Math.round(w.battery * 100) : '?'} % – Powerbank anschließen lassen, sonst ist das Gerät bald weg.`
             : `Seit ${fmtTime(w.since)} Uhr außerhalb`,
       })),
@@ -312,7 +312,7 @@ function renderCopySelect(rooms) {
 }
 
 async function copyRoom() {
-  const name = prompt('Name des neuen Raums? Spielfeld, Treffpunkt, Regeln und alle Einstellungen werden übernommen – Geräte und Verlauf nicht.', `${R.name} (Kopie)`.slice(0, 24));
+  const name = prompt('Name des neuen Raums? Spielfeld, Treffpunkt, Regeln und alle Einstellungen werden übernommen – Geräte und Verlauf nicht.', `${R.name} (Kopie)`.slice(0, 40));
   if (name === null) return;
   try {
     const room = await api('POST', '/api/admin/rooms', { name, copyFrom: roomId });
@@ -532,6 +532,17 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverl
 
 const qrSrc = (url) => `/api/admin/qr.svg?text=${encodeURIComponent(url)}`;
 
+// QR für Links mit Zugangsschlüssel: per POST holen, damit der Schlüssel nicht in Adressen, Verlauf oder Cache landet
+async function secretQr(url) {
+  const res = await fetch('/api/admin/qr', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'manhunt', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: url }),
+  });
+  if (!res.ok) throw Object.assign(new Error('QR-Code konnte nicht erzeugt werden'), { status: res.status });
+  return URL.createObjectURL(await res.blob());
+}
+
 function showJoinQr() {
   const url = `${baseUrl()}/j/${R.code}`;
   openOverlay(el('div', { class: 'card stack qr-full' },
@@ -593,9 +604,9 @@ function playerRow(p, t) {
   if (running && p.role === 'runner' && p.transport) {
     status.push(el('span', { class: 'badge', text: `${TRANSPORT_ICON[p.transport.mode]} ${TRANSPORT[p.transport.mode]} ${fmtTime(p.transport.at)}` }));
   }
-  if (p.outside) status.push(el('span', { class: 'badge danger', text: 'außerhalb' }));
+  if (p.outside && R.status === 'running') status.push(el('span', { class: 'badge danger', text: 'außerhalb' }));
   if (p.warnings?.some((w) => w.type === 'signal')) status.push(el('span', { class: 'badge warn', text: '⚠ kein Signal' }));
-  if (p.warnings?.some((w) => w.type === 'join' && !w.acked)) status.push(el('span', { class: 'badge warn', text: '⚠ neu im Spiel' }));
+  if (p.warnings?.some((w) => w.type === 'join' && !w.acked)) status.push(el('span', { class: 'badge warn', text: '⚠ neu' }));
   if (p.warnings?.some((w) => w.type === 'battery')) status.push(el('span', { class: 'badge warn', text: '🪫 Akku' }));
   if (p.geoError) status.push(el('span', { class: 'badge warn', text: p.geoError }));
   if (p.blockArmed) status.push(el('span', { class: 'badge', text: '🛡 blockt nächsten Ping' }));
@@ -649,8 +660,9 @@ function showPlayerDialog(pid) {
   const t = now();
   const running = R.status === 'running';
   // Den Wiederbeitritts-Link (= Zugang als dieses Gerät) bekommt nur die Spielleitung, nicht die Aufsicht
+  const rejoinImg = p.rejoinPath ? el('img', { alt: `Wiederbeitritts-QR für ${p.name}` }) : null;
   const qrBox = el('div', { class: 'dialog-qr stack hidden' },
-    p.rejoinPath ? el('img', { src: qrSrc(baseUrl() + p.rejoinPath), alt: `Wiederbeitritts-QR für ${p.name}` }) : null,
+    rejoinImg,
     el('p', { class: 'small muted', text: `Nur für ${p.name}! Mit diesem Code spielt ein anderes Handy als dieses Gerät weiter, z. B. nach leerem Akku.` }));
   const b = (text, onclick, cls = '') => el('button', { class: `btn ${cls}`, type: 'button', onclick, text });
   const status = p.emergency ? 'NOTFALL gemeldet'
@@ -681,7 +693,10 @@ function showPlayerDialog(pid) {
         $('#adminMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
       }) : null,
       p.pos ? el('a', { class: 'btn', href: routeUrl(p.pos.lat, p.pos.lng), target: '_blank', rel: 'noopener', text: 'Route ↗' }) : null,
-      p.rejoinPath ? b('Wiederbeitritts-QR', () => qrBox.classList.toggle('hidden')) : null,
+      p.rejoinPath ? b('Wiederbeitritts-QR', () => {
+        qrBox.classList.toggle('hidden');
+        if (!rejoinImg.src) secretQr(baseUrl() + p.rejoinPath).then((src) => { rejoinImg.src = src; }).catch(handleError);
+      }) : null,
       p.bot && p.rejoinPath ? el('a', { class: 'btn', href: p.rejoinPath, target: '_blank', rel: 'noopener', text: 'Als dieses Gerät ansehen ↗' }) : null,
       ...(p.warnings || []).filter((w) => !w.acked).map((w) => b(`${WARN_TEXT[w.type]} quittieren`, async () => {
         await ackWarning({ roomId, playerId: p.id, type: w.type });
@@ -758,6 +773,7 @@ function renderPointInfo() {
       : pendingZone ? `Kreis, Mitte ${fmt(pendingZone)}` : 'Kein Spielfeld festgelegt';
   const polygon = isPolygon();
   form.radius.disabled = polygon;
+  form.radius.closest('label').classList.toggle('hidden', polygon);
   $('#shrinkUnit').textContent = polygon ? 'm (Mitte bis äußerste Ecke)' : 'm Radius';
   $('#zonePick').textContent = picking === 'zone' ? 'Jetzt auf die Karte klicken …'
     : picking === 'polygon' ? 'Zeichnen abbrechen'
@@ -903,10 +919,10 @@ const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
 let roundsKey = '';
 function renderRounds() {
-  $('#replayBtn').disabled = !R.replayPings;
-  $('#replayBtn').title = R.replayPings
-    ? 'Alle Pings der letzten Runde als Zeitraffer – z. B. für den Beamer (bis zum Start der nächsten Runde)'
-    : 'Sobald es in einer Runde Pings gab, lassen sie sich hier als Zeitraffer abspielen';
+  $('#replayBtn').disabled = !R.replayPings || R.status === 'running';
+  $('#replayBtn').title = R.status === 'running' ? 'Das Replay gibt es erst nach Spielende'
+    : R.replayPings ? 'Alle Pings der letzten Runde als Zeitraffer – z. B. für den Beamer (bis zum Start der nächsten Runde)'
+      : 'Sobald es in einer Runde Pings gab, lassen sie sich hier nach Spielende als Zeitraffer abspielen';
   $('#csvRounds').href = `/api/admin/rooms/${roomId}/export/auswertung.csv`;
   $('#csvEvents').href = `/api/admin/rooms/${roomId}/export/verlauf.csv`;
   // Nur bei neuen Runden neu aufbauen, sonst klappen geöffnete Runden bei jeder Abfrage wieder zu

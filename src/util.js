@@ -66,6 +66,54 @@ function scaleZone(zone, radius) {
   };
 }
 
+// Ecken in Meter umrechnen (lokal, genügt für Stadtgebiete)
+function toMeters(points) {
+  const lat0 = (points.reduce((s, p) => s + p[0], 0) / points.length) * (Math.PI / 180);
+  return points.map(([a, b]) => [b * 111320 * Math.cos(lat0), a * 111320]);
+}
+
+// Flächeninhalt in m² (Gaußsche Trapezformel), vorzeichenlos
+function polygonAreaM2(points) {
+  const m = toMeters(points);
+  let a = 0;
+  for (let i = 0, j = m.length - 1; i < m.length; j = i++) a += (m[j][0] + m[i][0]) * (m[j][1] - m[i][1]);
+  return Math.abs(a / 2);
+}
+
+// Überkreuzen sich zwei nicht benachbarte Kanten?
+function selfIntersects(points) {
+  const m = toMeters(points);
+  const n = m.length;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const hit = (p1, p2, p3, p4) => {
+    const d1 = cross(p3, p4, p1), d2 = cross(p3, p4, p2), d3 = cross(p1, p2, p3), d4 = cross(p1, p2, p4);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  };
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue; // erste und letzte Kante hängen zusammen
+      if (hit(m[i], m[(i + 1) % n], m[j], m[(j + 1) % n])) return true;
+    }
+  }
+  return false;
+}
+
+// Liegt die Mitte auf der Innenseite aller Kanten? Nur dann bleibt die zur Mitte hin verkleinerte Fläche
+// vollständig in der ursprünglichen (die Mitte „sieht“ jede Ecke) – sonst wandert sie beim Schrumpfen hinaus.
+function starShaped(zone) {
+  const m = toMeters([...zone.points, [zone.lat, zone.lng]]);
+  const c = m.pop();
+  let area = 0;
+  for (let i = 0, j = m.length - 1; i < m.length; j = i++) area += (m[j][0] + m[i][0]) * (m[j][1] - m[i][1]);
+  const sign = area < 0 ? 1 : -1; // Umlaufsinn der Ecken
+  for (let i = 0; i < m.length; i++) {
+    const a = m[i], b = m[(i + 1) % m.length];
+    const cr = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    if (cr * sign < -1e-6) return false;
+  }
+  return true;
+}
+
 // Liegt pos im Spielfeld? scale < 1 prüft gegen ein entsprechend kleineres Feld (z. B. 0.9 = Randbereich)
 function insideZone(zone, pos, scale = 1) {
   if (!zone.points) return distanceM(pos, zone) <= zone.radius * scale;
@@ -102,5 +150,5 @@ function clampNum(v, min, max) {
 
 module.exports = {
   HttpError, randomId, distanceM, offsetPoint, bearingTo, polygonZone, scaleZone, insideZone,
-  cleanName, cleanText, clampInt, clampNum,
+  polygonAreaM2, selfIntersects, starShaped, cleanName, cleanText, clampInt, clampNum,
 };

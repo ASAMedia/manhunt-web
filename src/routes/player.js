@@ -12,6 +12,9 @@ const { route, readJson, rateLimit, limitKey, authPlayer } = require('../http');
 // Nach Spielende werden Standorte nur noch kurz angenommen (Rückweg zum Treffpunkt) – danach nicht mehr,
 // damit z. B. eine zu Hause geöffnete App keinen Standort mehr schickt und das automatische Löschen nicht aufhält
 const AFTER_END_MS = 2 * 3600e3;
+// In der Lobby nur, solange Spielleitung oder Aufsicht den Raum geöffnet hat (Handy-Check, Sammeln) –
+// eine abends zu Hause geöffnete App schickt so keinen Standort
+const STAFF_PRESENT_MS = 10 * 60e3;
 
 function roomByCode(code) {
   const c = String(code).toUpperCase();
@@ -39,7 +42,7 @@ route('POST', '/api/join/:code', async (req, res, { code }) => {
   const lateJoin = room.status !== 'lobby' || playersOf(room).some((o) => o.role);
   const p = {
     id: randomId(6), token: randomId(24), name, role: lateJoin ? 'hunter' : null, joinedAt: Date.now(),
-    lastSeen: null, pos: null, caughtAt: null, wasRunner: false, outside: false,
+    lastSeen: null, pos: null, caughtAt: null, wasRunner: false, outside: false, lateJoin,
   };
   room.players[p.id] = p;
   tokenIndex.set(p.token, { roomId: room.id, playerId: p.id });
@@ -57,6 +60,9 @@ route('POST', '/api/play/pos', async (req) => {
   const b = await readJson(req);
   const t = Date.now();
   if (room.status === 'ended' && t - room.endedAt > AFTER_END_MS) return { ok: true, ignored: true };
+  if (room.status === 'lobby' && !(t - (room.staffSeenAt || 0) < STAFF_PRESENT_MS)) return { ok: true, ignored: true };
+  // Das Handy sendet höchstens alle 3 Sekunden – mehr ist Missbrauch (z. B. um den Verlauf zu fluten)
+  limitKey(`pos:${p.id}`, 60, 60e3);
   p.lastSeen = t;
   const lat = Number(b.lat), lng = Number(b.lng);
   if (b.lat != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {

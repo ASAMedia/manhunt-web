@@ -85,7 +85,9 @@ async function fetchTile(z, x, y, file) {
 }
 
 async function serveTile(req, res, z, x, y) {
-  rateLimit(req, 'tiles', 1500, 60e3);
+  // Aus dem Zwischenspeicher großzügig (eine Klasse speichert im selben WLAN gleichzeitig ihre Offline-Karte),
+  // Downloads beim Kartenanbieter streng
+  rateLimit(req, 'tiles', 12000, 60e3);
   if (!(z >= 0 && z <= 19 && x >= 0 && x < 2 ** z && y >= 0 && y < 2 ** z)) throw new HttpError(404, 'Keine Kachel');
   const file = path.join(TILE_DIR, String(z), String(x), `${y}.png`);
   let stat = null;
@@ -98,6 +100,7 @@ async function serveTile(req, res, z, x, y) {
     const key = `${z}/${x}/${y}`;
     try {
       if (!tileInflight.has(key)) {
+        rateLimit(req, 'tile-fetch', 600, 60e3);
         checkBudget();
         tileInflight.set(key, fetchTile(z, x, y, file).finally(() => tileInflight.delete(key)));
       }

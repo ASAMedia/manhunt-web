@@ -69,6 +69,13 @@ export default async function flaecheAkkuReplay({ base, adminPass, supPass, chec
   await sleep(200);
   await req('POST', '/api/play/block', undefined, { token: tok.Aussen });
   await req('POST', `/api/admin/rooms/${room.id}/ping`, undefined, A);
+  const during = await req('GET', `/api/admin/rooms/${room.id}/replay`, undefined, SUP);
+  check(during.status === 409 && during.data.error.includes('Spielende'), 'Replay erst nach Spielende', during);
+  await req('PATCH', `/api/admin/rooms/${room.id}/players/${pid('Innen')}`, { caught: true }, A);
+  await req('POST', `/api/admin/rooms/${room.id}/end`, undefined, A);
+  const endedView = (await req('GET', '/api/play/state', undefined, { token: tok.Jaeger })).data;
+  check(endedView.pings === undefined && endedView.hunters === undefined && endedView.lastPingAt === null,
+    'nach Spielende bekommen Handys keine Pings und keine Standorte mehr', endedView);
   let rep = (await req('GET', `/api/admin/rooms/${room.id}/replay`, undefined, SUP)).data;
   const lastPing = rep.pings.at(-1);
   check(rep.pings.length >= 2 && rep.runners.length === 2, 'Aufsicht bekommt alle Pings und die Gejagten', { n: rep.pings.length, runners: rep.runners });
@@ -77,8 +84,9 @@ export default async function flaecheAkkuReplay({ base, adminPass, supPass, chec
   check(lastPing.positions.find((p) => p.name === 'Innen').lat === 52.515 && rep.zone.points && rep.shrinkFinalRadius === 400, 'Standorte, Fläche und End-Größe im Replay');
   check(!JSON.stringify(rep).includes('Jaeger') || !rep.pings.some((p) => p.positions.some((x) => x.name === 'Jaeger')), 'keine Jäger-Standorte im Replay');
 
-  await req('PATCH', `/api/admin/rooms/${room.id}/players/${pid('Innen')}`, { caught: true }, A);
-  await req('POST', `/api/admin/rooms/${room.id}/end`, undefined, A);
+  // Spielfeld nach der Runde ändern – das Replay zeigt trotzdem das Spielfeld der Runde
+  await req('PATCH', `/api/admin/rooms/${room.id}`, { settings: { shrinkEnabled: false, zone: { lat: 52.6, lng: 13.5, radius: 500 } } }, A);
+  check((await req('GET', `/api/admin/rooms/${room.id}/replay`, undefined, A)).data.zone.points?.length === 4, 'Replay zeigt das Spielfeld der Runde');
   await req('POST', `/api/admin/rooms/${room.id}/lobby`, undefined, A);
   adm = (await req('GET', `/api/admin/rooms/${room.id}`, undefined, A)).data;
   check(adm.status === 'lobby' && adm.pings.length === 0 && adm.replayPings >= 2, 'Nach „Neue Runde“: Karte leer, Replay noch da');
@@ -89,7 +97,7 @@ export default async function flaecheAkkuReplay({ base, adminPass, supPass, chec
     'Replay in der Lobby: Runde, Spielende und Fangzeiten aus der Auswertung', rep.runners);
   await req('POST', `/api/admin/rooms/${room.id}/start`, undefined, A);
   rep = (await req('GET', `/api/admin/rooms/${room.id}/replay`, undefined, A));
-  check(rep.status === 404 || rep.data.pings.every((p) => p.at >= rep.data.startedAt), 'neue Runde beginnt ohne alte Pings');
+  check(rep.status === 409, 'während der neuen Runde kein Replay (auch nicht der alten)');
   const empty = (await req('POST', '/api/admin/rooms', { name: 'Leer' }, A)).data;
   check((await req('GET', `/api/admin/rooms/${empty.id}/replay`, undefined, A)).status === 404, 'Raum ohne Pings = 404');
   const page = await req('GET', '/replay');
