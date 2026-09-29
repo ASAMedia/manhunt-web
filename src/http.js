@@ -158,12 +158,9 @@ function requireRole(req, allowSupervisor) {
 const requireAdmin = (req) => requireRole(req, false);
 const requireStaff = (req) => requireRole(req, true);
 
-// Nur für Routen der Spielleitung/Aufsicht: merkt sich dabei, dass gerade jemand den Raum im Blick hat
-// (in der Lobby nimmt der Server Standorte nur dann an)
 function getRoom(id) {
   const room = Object.hasOwn(state.rooms, id) ? state.rooms[id] : null;
   if (!room) throw new HttpError(404, 'Raum nicht gefunden');
-  room.staffSeenAt = Date.now();
   return room;
 }
 

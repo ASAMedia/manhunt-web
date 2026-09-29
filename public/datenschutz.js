@@ -29,7 +29,7 @@ function content(cfg) {
         ]],
         ['Which data?', [
           'The name or team name you enter.',
-          'Your location (coordinates, accuracy, time) – during the game every few seconds while the game page is open. Before the game (lobby) only while the game master has the room open; after the game for at most 2 hours (on the way back to the meeting point).',
+          'Your location (coordinates, accuracy, time) – every few seconds while the game page is open, before and during the game. It is only sent after you tap “Share location & start” (again each time you open the page); after the game the server accepts it for at most 2 hours (on the way back to the meeting point).',
           'Device status: battery level and charging, result of the phone check (location, screen, sound, vibration, iPhone/Android, installed as an app), location errors.',
           'Game events: role, joining, last signal, caught, inside/outside the play area, emergency call (with location), reported means of transport, blocks, name changes, messages from the game master.',
           'Technical: your IP address – only briefly in memory to prevent abuse (at most 15 minutes), it is not stored. For a program error: the error message, browser and operating system – without name or location.',
@@ -85,7 +85,7 @@ function content(cfg) {
       ]],
       ['Welche Daten?', [
         'Der Name oder Teamname, den du eingibst.',
-        'Dein Standort (Koordinaten, Genauigkeit, Zeitpunkt) – während des Spiels alle paar Sekunden, solange die Spielseite offen ist. Vor dem Spiel (Lobby) nur, während die Spielleitung den Raum geöffnet hat; nach Spielende höchstens 2 Stunden lang (Rückweg zum Treffpunkt).',
+        'Dein Standort (Koordinaten, Genauigkeit, Zeitpunkt) – alle paar Sekunden, solange die Spielseite offen ist, vor und während des Spiels. Er wird erst gesendet, nachdem du „Standort freigeben & loslegen“ getippt hast (bei jedem Öffnen der Seite neu); nach Spielende nimmt der Server ihn höchstens 2 Stunden lang an (Rückweg zum Treffpunkt).',
         'Geräte-Status: Akkustand und Laden, Ergebnis des Handy-Checks (Standort, Display, Ton, Vibration, iPhone/Android, als App installiert), Standortfehler.',
         'Spielverlauf: Rolle, Beitritt, letztes Signal, gefangen, innerhalb/außerhalb des Spielfelds, Notruf (mit Standort), gemeldete Verkehrsmittel, Blocks, Namensänderungen, Nachrichten der Spielleitung.',
         'Technisch: deine IP-Adresse – nur kurz im Arbeitsspeicher zum Schutz vor Missbrauch (höchstens 15 Minuten), sie wird nicht gespeichert. Bei einem Programmfehler: Fehlermeldung, Browser und Betriebssystem – ohne Name und Standort.',

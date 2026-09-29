@@ -24,7 +24,7 @@ const DICT = {
     'join.otherCode': 'Anderen Code eingeben',
     'join.closed': 'Der Beitritt ist gerade geschlossen. Frag die Spielleitung.',
     'join.enterName': 'Gib deinen Namen ein, um mitzuspielen.',
-    'join.privacy': 'Dein Standort wird an die Spielleitung übertragen – während des Spiels und davor, solange die Spielleitung den Raum geöffnet hat.',
+    'join.privacy': 'Dein Standort wird an die Spielleitung übertragen – vor und während des Spiels, sobald du „Standort freigeben & loslegen“ tippst.',
     'join.privacyLink': 'Was passiert mit meinen Daten?',
 
     'start.title': 'Bereit?',
@@ -231,7 +231,7 @@ const DICT = {
     'join.otherCode': 'Enter a different code',
     'join.closed': 'Joining is closed right now. Ask the game master.',
     'join.enterName': 'Enter your name to join.',
-    'join.privacy': 'Your location is shared with the game master – during the game and before it, while the game master has the room open.',
+    'join.privacy': 'Your location is shared with the game master – before and during the game, once you tap “Share location & start”.',
     'join.privacyLink': 'What happens to my data?',
 
     'start.title': 'Ready?',

@@ -457,12 +457,13 @@ function resolveEmergency(room, e, by) {
 
 // --- Automatisches Löschen ----------------------------------------------------
 
+// Letzte Aktivität = letztes Ereignis (Beitritt, Rundenstart/-ende, Aktionen der Spielleitung …).
+// Standortmeldungen zählen bewusst nicht – eine später geöffnete App verlängert die Aufbewahrung nicht.
+// Test-Geräte zählen auch nicht, sonst würde ein Probe-Raum nie gelöscht.
 function lastActivity(room) {
   let t = Math.max(room.createdAt, room.endedAt || 0);
-  // Test-Geräte zählen nicht als Aktivität, sonst würde ein Probe-Raum nie gelöscht
   const real = room.events.findLast((e) => !e.bot);
   if (real?.at > t) t = real.at;
-  for (const p of playersOf(room)) if (!p.bot && p.lastSeen > t) t = p.lastSeen;
   return t;
 }
 

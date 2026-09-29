@@ -13,20 +13,16 @@ export default async function review2({ base, adminPass, supPass, check, section
   await req('POST', '/api/admin/login', { password: supPass }, { ...SUP, ...xff });
 
   section('Sichtbarkeit und Lobby-Standorte');
-  // Raum anlegen und beitreten – dabei hat noch niemand von der Spielleitung den Raum geöffnet
+  // Raum anlegen und beitreten – die Spielleitung muss dafür nicht angemeldet sein oder zuschauen
   const room = (await req('POST', '/api/admin/rooms', { name: 'Prüfung 2' }, A)).data;
   const C = { lat: 52.52, lng: 13.40 };
   const tok = {};
   for (const n of ['G1', 'J1', 'J2']) tok[n] = (await req('POST', `/api/join/${room.code}`, { name: n })).data.token;
   const pos = (t, lat, lng = C.lng) => req('POST', '/api/play/pos', { lat, lng, acc: 8 }, { token: t });
-  const ignored = (await pos(tok.J1, 52.6)).data;
-  let adm = (await req('GET', `/api/admin/rooms/${room.id}`, undefined, A)).data;
-  check(ignored.ignored === true && adm.players.find((p) => p.name === 'J1').pos === null,
-    'Lobby: Standort wird ignoriert, solange niemand den Raum geöffnet hat', ignored);
-  await req('PATCH', `/api/admin/rooms/${room.id}`, { settings: { zone: { ...C, radius: 500 }, headStartMin: 0, durationMin: 30, pingIntervalMin: 5 } }, A);
   const accepted = (await pos(tok.J1, C.lat)).data;
-  adm = (await req('GET', `/api/admin/rooms/${room.id}`, undefined, SUP)).data;
-  check(!accepted.ignored && adm.players.find((p) => p.name === 'J1').pos?.lat === C.lat, 'Lobby: bei geöffnetem Raum angenommen');
+  await req('PATCH', `/api/admin/rooms/${room.id}`, { settings: { zone: { ...C, radius: 500 }, headStartMin: 0, durationMin: 30, pingIntervalMin: 5 } }, A);
+  const adm = (await req('GET', `/api/admin/rooms/${room.id}`, undefined, SUP)).data;
+  check(!accepted.ignored && adm.players.find((p) => p.name === 'J1').pos?.lat === C.lat, 'Lobby: Standort angenommen, auch ohne angemeldete Spielleitung');
   const pid = (n) => adm.players.find((p) => p.name === n).id;
   await req('PATCH', `/api/admin/rooms/${room.id}/players/${pid('G1')}`, { role: 'runner' }, A);
   await req('PATCH', `/api/admin/rooms/${room.id}/players/${pid('J1')}`, { role: 'hunter' }, A);
