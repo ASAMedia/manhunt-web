@@ -16,6 +16,7 @@ const { serveManifest, serveRobots, serveStatic } = require('./src/static');
 require('./src/routes/admin');
 require('./src/routes/player');
 require('./src/clientErrors');
+require('./src/setupCheck');
 
 route('GET', '/api/health', () => ({ ok: true }));
 

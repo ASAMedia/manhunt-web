@@ -621,3 +621,35 @@ body.replay .leaflet-tooltip.map-label { font-size: 15px; font-weight: 700; }
   .replay-side { border-left: 0; border-top: 1px solid var(--border); max-height: 35dvh; }
   .replay-time { font-size: 1.4rem; }
 }
+
+/* Einrichtungs-Check im Admin */
+.setup-check.has-warn { border-color: var(--warn-solid); }
+.setup-list li { display: flex; gap: .6rem; align-items: flex-start; justify-content: flex-start; }
+.setup-icon { flex: 0 0 1.35rem; height: 1.35rem; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: .8rem; color: #fff; margin-top: .1rem; }
+.setup-item.ok .setup-icon { background: var(--ok); }
+.setup-item.warn .setup-icon { background: var(--warn-solid); }
+.setup-item.info .setup-icon { background: var(--caught); }
+
+/* Notfallkarten: 6 pro A4-Seite (2 × 3), Schnittlinien gestrichelt */
+.cards { display: grid; grid-template-columns: repeat(2, 93mm); grid-auto-rows: 88mm; gap: 0; justify-content: center; padding: 8mm 0; color: #111; }
+.ncard { border: 1px dashed #999; padding: 4mm 4.5mm; font-size: 9pt; line-height: 1.35; display: flex; flex-direction: column; gap: 1.6mm; overflow: hidden; break-inside: avoid; }
+.ncard header { display: flex; justify-content: space-between; gap: 3mm; align-items: baseline; border-bottom: 2px solid #b3261e; padding-bottom: 1mm; }
+.ncard header strong { color: #b3261e; font-size: 11pt; text-transform: uppercase; letter-spacing: .04em; }
+.ncard header span { font-size: 8pt; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ncard-row { display: flex; align-items: baseline; gap: 1mm; }
+.ncard-meet { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3mm; align-items: start; }
+.ncard-meet > div > div { display: flex; align-items: baseline; gap: 1mm; flex-wrap: wrap; margin-bottom: .6mm; }
+.ncard-phones { margin-top: 1mm; display: block !important; }
+.ncard-phones > div { display: flex; align-items: baseline; gap: 1mm; margin-bottom: .6mm; }
+.ncard figure { margin: 0; text-align: center; }
+.ncard figure img { width: 22mm; height: 22mm; display: block; }
+.ncard figcaption { font-size: 6.5pt; color: #555; }
+.ncard ol { margin: 0; padding-left: 4.5mm; font-size: 8.3pt; }
+.ncard ol li + li { margin-top: .4mm; }
+.ncard .blank { display: inline-block; border-bottom: 1px solid #555; height: 1em; flex: 1 1 auto; min-width: 15mm; }
+.print-toolbar input, .print-toolbar select { margin-left: .3rem; }
+@media screen and (max-width: 200mm) { .cards { grid-template-columns: 93mm; } }
+@media print {
+  .cards { padding: 0; }
+  .ncard:nth-child(6n) { break-after: page; }
+}

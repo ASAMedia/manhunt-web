@@ -45,6 +45,8 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | | |
 |---|---|
 | Druckblatt | A4 mit QR-Code, Kurzanleitung, Eckdaten und Regeln – zum Ausdrucken oder Beamern |
+| **Notfallkarten** | 6 Karten pro A4-Seite für die Gruppen: Treffpunkt mit QR zur Route, Rückkehrzeit, Nummern, was tun, wenn App oder Handy ausfallen |
+| **Einrichtungs-Check** | Karte oben in der Raumliste: prüft HTTPS, öffentliche Adresse, ob der Proxy die Handy-Adressen weitergibt, Passwort, Datenschutz-Angaben, Löschfrist, Kartenserver, Speicher, liegengebliebene Test-Geräte, Uhrzeit |
 | Probespiel | Test-Geräte, die selbst über die Karte laufen – zum Ausprobieren allein |
 | **Raum kopieren** | Spielfeld, Treffpunkt, Regeln und alle Einstellungen in einen neuen Raum übernehmen (ohne Geräte) – z. B. für die zweite Klasse oder Runde |
 | Auswertung | pro Runde: wer wann gefangen wurde, Pings, Blocks, Notfälle; CSV-Export (Excel); keine Bewegungsspuren |
@@ -105,7 +107,31 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 
 > **Tunnel:** Die Adresse ändert sich bei jedem Neustart des Tunnels. Am Spieltag also nicht neu starten; falls doch, beigetretene Geräte über den Wiederbeitritts-QR (⋯ in der Geräte-Liste) wieder verbinden.
 
-> **Vorhandener Reverse Proxy:** die (Sub-)Domain per HTTPS auf `http://127.0.0.1:3000` weiterleiten, `PUBLIC_URL=https://…` setzen. Der Proxy muss die Adresse des Handys an `X-Forwarded-For` **anhängen** (nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`) – die App wertet den letzten Eintrag aus (Rate-Limits pro Gerät). Zugriffs-Logs des Proxys besser aus lassen: Wiederbeitritts-Links (`/r/…`) sind Zugangsschlüssel. Läuft der Proxy selbst in Docker, statt des Ports sein Netzwerk an den Dienst `app` hängen.
+### Hinter einem vorhandenen Reverse Proxy
+
+In der `.env`: `COMPOSE_PROFILES` ohne `caddy`/`tunnel` (höchstens `autoupdate`), `PUBLIC_URL=https://manhunt.example.de`. Die App lauscht dann auf `http://127.0.0.1:3000` (`LOCAL_PORT`). Der Proxy muss HTTPS machen, die Adresse des Handys an `X-Forwarded-For` **anhängen** (die App wertet den letzten Eintrag aus) und `X-Forwarded-Proto` setzen. Beispiel für nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name manhunt.example.de;
+    # ssl_certificate / ssl_certificate_key – z. B. von certbot
+
+    access_log off;               # Wiederbeitritts-Links (/r/…) sind Zugangsschlüssel – nicht protokollieren
+    client_max_body_size 64k;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Caddy auf dem Host (`reverse_proxy 127.0.0.1:3000`), Traefik und Nginx Proxy Manager setzen diese Header von selbst. Läuft der Proxy selbst in Docker, erreicht er `127.0.0.1` des Hosts nicht – dann sein Docker-Netzwerk an den Dienst `app` hängen und auf `http://app:3000` weiterleiten. Zugriffs-Logs möglichst ausschalten.
+
+**Danach prüfen:** `/admin` über die öffentliche Adresse öffnen – der **Einrichtungs-Check** oben in der Raumliste zeigt, ob HTTPS und die Handy-Adressen richtig ankommen (bei „Adressen hinter dem Proxy“ muss deine echte öffentliche Adresse stehen).
 
 ## Ablauf am Spieltag
 

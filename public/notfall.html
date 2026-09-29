@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Manhunt – Notfallkarten</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="print-page">
+  <div class="print-toolbar no-print">
+    <button id="printBtn" class="btn primary" type="button">Drucken / als PDF speichern</button>
+    <label class="small">Seiten
+      <select id="pages" aria-label="Anzahl Seiten">
+        <option value="1">1 (6 Karten)</option>
+        <option value="2">2 (12 Karten)</option>
+        <option value="3">3 (18 Karten)</option>
+      </select>
+    </label>
+    <label class="small">Zurück am Treffpunkt um <input id="returnTime" type="time" aria-label="Rückkehrzeit"></label>
+    <label class="small">Weitere Nummer <input id="phone2" maxlength="40" placeholder="z. B. Herr Beispiel 0170 …" aria-label="Weitere Telefonnummer"></label>
+    <span class="small">Eine Karte pro Gruppe – ausschneiden und mitgeben.</span>
+  </div>
+  <main id="cards" class="cards"><p>Lade …</p></main>
+  <script type="module" src="/notfall.js"></script>
+</body>
+</html>

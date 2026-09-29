@@ -104,6 +104,21 @@ export default async function review2({ base, adminPass, supPass, check, section
   const errs = (await req('GET', '/api/admin/client-errors', undefined, A)).data;
   check(errRes.status === 200 && errs.some((e) => e.page === '/j/…') && !JSON.stringify(errs).includes(room.code), 'Fehlerberichte ohne Spielcode');
 
+  section('Einrichtungs-Check');
+  const sc = (await req('GET', '/api/admin/setup-check', undefined, A)).data;
+  const byTitle = (t) => sc.checks?.find((c) => c.title === t);
+  check(Array.isArray(sc.checks) && sc.checks.length >= 10 && sc.serverTime > 0, 'Einrichtungs-Check liefert Prüfpunkte', sc);
+  check(byTitle('HTTPS')?.status === 'warn' && byTitle('Öffentliche Adresse')?.status === 'warn', 'Test-Server ohne HTTPS/PUBLIC_URL: Warnungen');
+  check(byTitle('Adressen hinter dem Proxy')?.status === 'warn', 'ohne X-Forwarded-For: Warnung zu den Geräte-Adressen');
+  const viaProxy = (await req('GET', '/api/admin/setup-check', undefined, { ...A, headers: { 'X-Forwarded-For': '203.0.113.9', 'X-Forwarded-Proto': 'https' } })).data;
+  const pick = (t) => viaProxy.checks.find((c) => c.title === t);
+  check(pick('Adressen hinter dem Proxy').status === 'ok' && pick('Adressen hinter dem Proxy').text.includes('203.0.113.9') && pick('HTTPS').status === 'ok',
+    'hinter einem korrekt eingestellten Proxy: HTTPS und Geräte-Adresse ok', viaProxy.checks.slice(0, 3));
+  check(byTitle('Datenschutz-Angaben')?.status === 'warn' && byTitle('Karte')?.status === 'ok', 'fehlende Datenschutz-Angaben gemeldet, Karte erreichbar');
+  check((await req('GET', '/api/admin/setup-check', undefined, SUP)).status === 403, 'Einrichtungs-Check nur für die Spielleitung');
+  const cards = await req('GET', '/notfallkarten');
+  check(cards.status === 200 && cards.ct.includes('html'), '/notfallkarten ausgeliefert');
+
   section('Abmelden beendet die Sitzung');
   const old = await cookieOf(base, adminPass);
   const hdr = { Cookie: old, 'X-Requested-With': 'manhunt' };

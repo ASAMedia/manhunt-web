@@ -8,7 +8,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { TILE_DIR, TILE_URL, TILE_CACHE_DAYS, MAP_CENTER, PUBLIC_URL } = require('./config');
+const { TILE_DIR, TILE_URL, TILE_CACHE_DAYS, TILE_PROXY, MAP_CENTER, PUBLIC_URL } = require('./config');
 const { HttpError, distanceM } = require('./util');
 const { state } = require('./store');
 const { rateLimit, sessionRole } = require('./http');
@@ -143,4 +143,24 @@ function startTileCleanup() {
   setInterval(cleanTiles, 6 * 3600e3);
 }
 
-module.exports = { serveTile, startTileCleanup };
+// Für den Einrichtungs-Check: Ist eine Kachel der Kartenmitte im Speicher oder beim Kartenanbieter abrufbar?
+async function tileHealth() {
+  if (!TILE_PROXY) return { ok: null, text: 'Kartenbilder kommen direkt vom Kartenanbieter (TILE_PROXY=0) – dann sieht OpenStreetMap die Adressen der Handys, und die Offline-Karte fehlt.' };
+  const z = 12;
+  const x = Math.floor(((MAP_CENTER[1] + 180) / 360) * 2 ** z);
+  const r = (MAP_CENTER[0] * Math.PI) / 180;
+  const y = Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** z);
+  const file = path.join(TILE_DIR, String(z), String(x), `${y}.png`);
+  try {
+    const st = await fs.promises.stat(file);
+    if (Date.now() - st.mtimeMs < TILE_CACHE_DAYS * 86400e3) return { ok: true, text: 'Kartenbilder liegen im Zwischenspeicher, der Kartenanbieter war erreichbar.' };
+  } catch { /* noch nicht geholt */ }
+  try {
+    await fetchTile(z, x, y, file);
+    return { ok: true, text: 'Der Kartenanbieter ist erreichbar, Kartenbilder werden zwischengespeichert.' };
+  } catch (e) {
+    return { ok: false, text: `Der Kartenanbieter ist nicht erreichbar (${e.message}) – ohne Karte kein Spiel. Internetzugang des Servers und TILE_URL prüfen.` };
+  }
+}
+
+module.exports = { serveTile, startTileCleanup, tileHealth };

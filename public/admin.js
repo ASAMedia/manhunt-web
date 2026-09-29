@@ -258,6 +258,7 @@ async function openList() {
   roomId = null;
   show('listView');
   updateTitle();
+  loadSetupCheck();
   await loadList();
 }
 
@@ -320,6 +321,38 @@ async function copyRoom() {
     location.hash = `room=${room.id}`;
   } catch (e) { handleError(e); }
 }
+
+// ---------------------------------------------------------------------------
+// Einrichtungs-Check (nur Spielleitung)
+// ---------------------------------------------------------------------------
+
+const CHECK_ICON = { ok: '✓', warn: '!', info: 'i' };
+
+async function loadSetupCheck() {
+  const box = $('#setupCheck');
+  if (!isAdmin()) { box.classList.add('hidden'); return; }
+  let data;
+  try { data = await api('GET', '/api/admin/setup-check'); } catch { return; }
+  const checks = [...data.checks];
+  if (!window.isSecureContext) {
+    checks.unshift({ status: 'warn', title: 'Sichere Verbindung', text: 'Dieser Browser hält die Seite nicht für sicher (kein HTTPS) – Standort, App-Installation und Offline-Karte funktionieren so auf Handys nicht.' });
+  }
+  const skew = Math.round((data.serverTime - Date.now()) / 1000);
+  if (Math.abs(skew) > 60) {
+    checks.unshift({ status: 'warn', title: 'Uhrzeit', text: `Die Uhr des Servers weicht um ${Math.abs(skew)} Sekunden von diesem Gerät ab – Countdowns wirken dann verschoben. Zeitabgleich (NTP) auf dem Server prüfen.` });
+  }
+  const open = checks.filter((c) => c.status === 'warn').length;
+  $('#setupTitle').textContent = open ? `Einrichtung: ${open} ${open === 1 ? 'Punkt' : 'Punkte'} offen` : 'Einrichtung: bereit für den Einsatz ✓';
+  box.classList.remove('hidden');
+  box.classList.toggle('has-warn', open > 0);
+  if (open && !box.dataset.touched) box.open = true;
+  $('#setupList').replaceChildren(...checks.map((c) => el('li', { class: `setup-item ${c.status}` },
+    el('span', { class: 'setup-icon', 'aria-hidden': 'true', text: CHECK_ICON[c.status] }),
+    el('div', {}, el('strong', { text: c.title }), el('div', { class: 'small muted', text: c.text })))));
+}
+
+$('#setupRecheck').addEventListener('click', () => loadSetupCheck());
+$('#setupCheck summary').addEventListener('click', () => { $('#setupCheck').dataset.touched = '1'; });
 
 // ---------------------------------------------------------------------------
 // Fehlerberichte von Handys
@@ -913,6 +946,7 @@ $('#addBots').addEventListener('click', async () => {
 });
 $('#removeBots').addEventListener('click', () => act('DELETE', '/bots'));
 $('#printSheet').addEventListener('click', () => window.open(`/print#${roomId}`, '_blank'));
+$('#printCards').addEventListener('click', () => window.open(`/notfallkarten#${roomId}`, '_blank'));
 $('#replayBtn').addEventListener('click', () => window.open(`/replay#${roomId}`, '_blank'));
 
 const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
