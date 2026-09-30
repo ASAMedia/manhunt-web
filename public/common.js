@@ -116,8 +116,8 @@ export function defaultRules(s, lang = 'de') {
   const lines = [
     'So läuft das Spiel',
     s.headStartMin > 0
-      ? `• Die Gejagten bekommen ${s.headStartMin} Minuten Vorsprung. Danach sehen die Jäger alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping). Die Jäger sind für Gejagte nie sichtbar.`
-      : `• Die Jäger sehen ab Spielbeginn alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping). Die Jäger sind für Gejagte nie sichtbar.`,
+      ? `• Die Gejagten bekommen ${s.headStartMin} Minuten Vorsprung. Danach sehen die Jäger alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping) – und die Gejagten, wo die Jäger in diesem Moment sind. Dazwischen sieht niemand die andere Seite.`
+      : `• Ab Spielbeginn sehen die Jäger alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping) – und die Gejagten, wo die Jäger in diesem Moment sind. Dazwischen sieht niemand die andere Seite.`,
   ];
   if (s.pingWarningSec) lines.push(`• ${fmtSeconds(s.pingWarningSec)} vor jedem Ping kommt eine Vorwarnung.`);
   lines.push('• Gefangen ist, wer von einem Jäger berührt wird. Dann auf „Ich wurde gefangen“ tippen – ab jetzt jagst du mit.');
@@ -137,8 +137,8 @@ function defaultRulesEn(s) {
   const lines = [
     'How the game works',
     s.headStartMin > 0
-      ? `• Runners get a ${s.headStartMin}-minute head start. After that, the hunters see where the runners are every ${s.pingIntervalMin} minutes (ping). Runners never see the hunters.`
-      : `• From the start, the hunters see where the runners are every ${s.pingIntervalMin} minutes (ping). Runners never see the hunters.`,
+      ? `• Runners get a ${s.headStartMin}-minute head start. After that, every ${s.pingIntervalMin} minutes (ping) the hunters see where the runners are – and the runners see where the hunters are at that moment. In between, nobody sees the other side.`
+      : `• From the start, every ${s.pingIntervalMin} minutes (ping) the hunters see where the runners are – and the runners see where the hunters are at that moment. In between, nobody sees the other side.`,
   ];
   if (s.pingWarningSec) lines.push(`• You get a warning ${fmtSeconds(s.pingWarningSec, 'en')} before every ping.`);
   lines.push('• You are caught when a hunter touches you. Then tap “I was caught” – from then on you hunt too.');

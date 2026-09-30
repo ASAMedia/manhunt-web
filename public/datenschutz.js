@@ -3,7 +3,7 @@ import { lang, applyI18n, langButton } from './i18n.js';
 
 // Datenschutz-Hinweise für Spieler und Eltern – Inhalt folgt der tatsächlichen Konfiguration des Servers.
 // Bei Änderungen am Verhalten der App: Text anpassen und STAND erhöhen.
-const STAND = { de: '29.09.2026', en: '29 September 2026' };
+const STAND = { de: '30.09.2026', en: '30 September 2026' };
 applyI18n();
 $('#langSlot').append(langButton());
 if (store.get('mh_token')) $('#back').href = '/play';
@@ -38,9 +38,9 @@ function content(cfg) {
         ['Who sees what?', [
           'Game master and supervisor: all data above, including your live location – for supervision and emergencies. In an emergency the game master can open Google Maps with your location as the destination (“Route”).',
           'Hunters: during the running game, the runners’ locations only at ping times (not when blocked), the other hunter teams live and the reported means of transport.',
-          'Runners: no locations of others.',
+          'Runners: during the running game, at every ping the hunter teams’ locations at that moment (until the next ping); otherwise no locations of others.',
           'All players: names, roles, who was caught when, the result and, in the lobby, who has joined.',
-          'After the game, the game master can show the runners’ ping locations as a time-lapse with connecting lines, e.g. on a projector in front of the class. Blocked pings and hunters are never shown.',
+          'After the game, the game master can show the runners’ ping locations as a time-lapse with connecting lines, e.g. on a projector in front of the class. Blocked pings and hunters are not shown.',
         ]],
         ['Where and for how long?', [
           hosting ? `The data is stored on the game master’s server at ${hosting} (processor).` : 'The data is stored on the game master’s server. If it is run by a hosting provider, that provider is a processor.',
@@ -94,9 +94,9 @@ function content(cfg) {
       ['Wer sieht was?', [
         'Spielleitung und Aufsicht: alle oben genannten Daten, deinen Standort live – zur Aufsicht und für Notfälle. Im Notfall kann die Spielleitung Google Maps mit deinem Standort als Ziel öffnen („Route“).',
         'Jäger: während des laufenden Spiels die Standorte der Gejagten nur zu den Ping-Zeitpunkten (nicht bei einem Block), die anderen Jäger-Teams live und die gemeldeten Verkehrsmittel.',
-        'Gejagte: keine Standorte anderer.',
+        'Gejagte: während des laufenden Spiels bei jedem Ping die Standorte der Jäger-Teams in diesem Moment (bis zum nächsten Ping); sonst keine Standorte anderer.',
         'Alle Mitspielenden: Namen, Rollen, wer wann gefangen wurde, das Ergebnis und in der Lobby, wer beigetreten ist.',
-        'Nach dem Spiel kann die Spielleitung die Ping-Standorte der Gejagten als Zeitraffer mit Verbindungslinien zeigen, z. B. am Beamer vor der Klasse. Blockierte Pings und Jäger werden nie gezeigt.',
+        'Nach dem Spiel kann die Spielleitung die Ping-Standorte der Gejagten als Zeitraffer mit Verbindungslinien zeigen, z. B. am Beamer vor der Klasse. Blockierte Pings und Jäger werden dabei nicht gezeigt.',
       ]],
       ['Wo und wie lange?', [
         hosting ? `Die Daten liegen auf dem Server der Spielleitung bei ${hosting} (Auftragsverarbeiter).` : 'Die Daten liegen auf dem Server der Spielleitung. Wird er bei einem Hosting-Anbieter betrieben, ist dieser Auftragsverarbeiter.',

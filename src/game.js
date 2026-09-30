@@ -236,7 +236,8 @@ function backToLobby(room) {
   logEvent(room, 'Zurück in der Lobby');
 }
 
-// Ping: Positionen aller Gejagten. Wer vorher einen Block eingesetzt hat, bleibt bei genau diesem Ping unsichtbar.
+// Ping: Positionen aller Gejagten (für die Jäger) und aller Jäger (für die Gejagten), jeweils als Momentaufnahme.
+// Wer als Gejagter vorher einen Block eingesetzt hat, bleibt bei genau diesem Ping unsichtbar.
 function doPing(room, kind, by) {
   const at = Date.now();
   let blocked = 0;
@@ -252,7 +253,10 @@ function doPing(room, kind, by) {
         ? { playerId: p.id, name: p.name, lat: p.pos.lat, lng: p.pos.lng, acc: p.pos.acc, t: p.pos.t }
         : { playerId: p.id, name: p.name, missing: true };
     });
-  room.pings.push({ id: randomId(6), at, kind, by: by || null, positions });
+  const hunters = playersOf(room)
+    .filter((p) => p.role === 'hunter' && p.pos)
+    .map((p) => ({ name: p.name, lat: p.pos.lat, lng: p.pos.lng }));
+  room.pings.push({ id: randomId(6), at, kind, by: by || null, positions, hunters });
   if (room.pings.length > MAX_PINGS) room.pings.splice(0, room.pings.length - MAX_PINGS);
   if (kind === 'regular') {
     const iv = room.settings.pingIntervalMin * 60e3;

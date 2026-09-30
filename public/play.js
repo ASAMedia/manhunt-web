@@ -317,6 +317,7 @@ function detectChanges() {
         fitToPing();
       } else if (me.role === 'runner') {
         showBanner('ping', t(wasArmed && !me.blockArmed ? 'banner.pingBlocked' : 'banner.pingRunner', { kind }));
+        fitToPing();
       }
       vibrate([200, 100, 200]);
       sound('ping');
@@ -929,6 +930,12 @@ function drawMap() {
   }
 
   layers.hunters.clearLayers();
+  // Gejagte: Jäger-Positionen vom letzten Ping (gestrichelt, mit Uhrzeit – keine Live-Positionen)
+  const snap = room.status === 'running' ? S.huntersAtPing : null;
+  for (const h of snap?.hunters || []) {
+    labeledMarker([h.lat, h.lng], { color: hunterColor, radius: 8 * scale, fill: 0.75, dashed: true, label: `${h.name} · ${fmtTime(snap.at)}` })
+      .addTo(layers.hunters);
+  }
   for (const h of room.status === 'running' ? S.hunters || [] : []) {
     const stale = now() - h.t > 120000;
     labeledMarker([h.lat, h.lng], { color: hunterColor, radius: 7 * scale, fill: stale ? 0.3 : 0.9, label: h.name, className: stale ? 'old' : '' })
@@ -942,6 +949,7 @@ function drawMap() {
 function initialView() {
   if (centered || !map || !S) return;
   if (S.me.role === 'hunter' && S.pings?.some((p) => p.positions.some((x) => x.lat != null))) return fitToPing();
+  if (S.me.role === 'runner' && S.huntersAtPing?.hunters.length) return fitToPing();
   let fit = null;
   if (S.room.zone) {
     const z = S.room.zone;
@@ -980,10 +988,14 @@ function drawOwn() {
   initialView();
 }
 
+// Karte auf den letzten Ping einpassen: Jäger sehen die Gejagten, Gejagte die Jäger – plus die eigene Position
 function fitToPing() {
-  const latest = S?.pings?.at(-1);
-  if (!map || !latest) return;
-  const pts = latest.positions.filter((p) => p.lat != null).map((p) => [p.lat, p.lng]);
+  if (!map || !S) return;
+  const latest = S.pings?.at(-1);
+  const pts = [
+    ...(latest?.positions || []).filter((p) => p.lat != null).map((p) => [p.lat, p.lng]),
+    ...(S.huntersAtPing?.hunters || []).map((h) => [h.lat, h.lng]),
+  ];
   if (lastPos) pts.push([lastPos.lat, lastPos.lng]);
   if (!pts.length) return;
   // Leaflet merkt sich die Kartengröße – vor dem Einpassen die aktuelle Größe erzwingen

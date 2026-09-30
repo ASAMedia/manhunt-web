@@ -100,8 +100,13 @@ function playerView(room, me) {
     lastPingKind: running ? room.pings.at(-1)?.kind ?? null : null,
   };
   if (room.status === 'lobby') view.lobby = players.map((p) => p.name);
+  // Gejagte sehen im Spiel beim Ping, wo die Jäger in diesem Moment waren – bis zum nächsten Ping
+  const lastPing = room.pings.at(-1);
+  if (running && me.role === 'runner' && lastPing?.hunters) {
+    view.huntersAtPing = { at: lastPing.at, hunters: lastPing.hunters };
+  }
   if (hunterInGame) {
-    view.pings = room.pings.slice(-4);
+    view.pings = room.pings.slice(-4).map((p) => ({ id: p.id, at: p.at, kind: p.kind, by: p.by, positions: p.positions }));
     view.hunters = players
       .filter((p) => p.role === 'hunter' && p.id !== me.id && p.pos)
       .map((p) => ({ name: p.name, lat: p.pos.lat, lng: p.pos.lng, t: p.pos.t }));

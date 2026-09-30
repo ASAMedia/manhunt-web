@@ -103,9 +103,11 @@ export default async function basics({ base, adminPass: PASS, check, section }) 
   let runner = (await req('GET', '/api/play/state', undefined, { token: tokens.Anna })).data;
   check(hunter.pings?.length === 1 && hunter.pings[0].positions.length === 2, 'Erster Ping bei Vorsprung 0 mit 2 Gejagten', hunter.pings);
   check(hunter.hunters?.length === 1 && hunter.hunters[0].name === 'Jäger-Team 2', 'Jäger sieht anderes Jäger-Team live');
-  check(runner.pings === undefined && runner.hunters === undefined, 'Gejagter sieht weder Pings noch Jäger');
+  check(runner.pings === undefined && runner.hunters === undefined, 'Gejagter sieht keine Pings und keine Live-Positionen der Jäger');
   check(runner.lastPingAt === hunter.pings[0].at, 'Gejagter kennt Ping-Zeitpunkt');
-  check(JSON.stringify(runner).includes('13.385') === false, 'keine Jäger-Koordinaten im Gejagten-Status');
+  const { huntersAtPing, ...rest } = runner;
+  check(!JSON.stringify(rest).includes('13.385') && huntersAtPing?.at === hunter.pings[0].at,
+    'Jäger-Koordinaten beim Gejagten nur als Momentaufnahme des Pings');
   check((await req('POST', '/api/play/extra-ping', undefined, { token: tokens.Anna })).status === 403, 'Gejagter kann keinen Extra-Ping');
   hunter = (await req('POST', '/api/play/extra-ping', undefined, { token: tokenOf['Jäger-Team 2'] })).data;
   check(hunter.pings.length === 2 && hunter.pings[1].kind === 'extra' && hunter.room.extraPingsLeft === 0, 'Extra-Ping ausgelöst, 0 übrig');

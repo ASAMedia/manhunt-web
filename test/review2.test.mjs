@@ -42,6 +42,20 @@ export default async function review2({ base, adminPass, supPass, check, section
   check(runningHunter.hunters?.some((h) => h.name === 'J2') && runningRunner.hunters === undefined && runningRunner.pings === undefined,
     'Im Spiel: Jäger sehen Mitjäger, Gejagte nichts');
 
+  section('Gejagte sehen Jäger beim Ping');
+  await pos(tok.J1, C.lat, C.lng + 0.001);
+  await pos(tok.J2, C.lat, C.lng - 0.001);
+  await req('POST', `/api/admin/rooms/${room.id}/ping`, undefined, A);
+  let rv = (await req('GET', '/api/play/state', undefined, { token: tok.G1 })).data;
+  const j1 = () => rv.huntersAtPing?.hunters.find((h) => h.name === 'J1');
+  check(rv.huntersAtPing?.hunters.length === 2 && j1()?.lng === C.lng + 0.001 && rv.huntersAtPing.at > 0,
+    'Gejagte bekommen beim Ping die Jäger-Positionen (Jäger ohne Standort fehlen)', rv.huntersAtPing);
+  await pos(tok.J1, C.lat, C.lng + 0.005);
+  rv = (await req('GET', '/api/play/state', undefined, { token: tok.G1 })).data;
+  check(j1()?.lng === C.lng + 0.001, 'nur Momentaufnahme: spätere Bewegung der Jäger sehen Gejagte erst beim nächsten Ping');
+  const hv = (await req('GET', '/api/play/state', undefined, { token: tok.J1 })).data;
+  check(hv.huntersAtPing === undefined && hv.pings.every((p) => p.hunters === undefined), 'Jäger bekommen die Momentaufnahme nicht zusätzlich');
+
   section('Spielfeldrand mit Toleranz');
   const outsideOf = async (m) => {
     await pos(tok.G1, north(C.lat, m));
@@ -73,7 +87,8 @@ export default async function review2({ base, adminPass, supPass, check, section
     'Verlauf voll: Notruf und Rundenstart bleiben, alte Nachrichten fallen raus');
   await req('POST', `/api/admin/rooms/${room.id}/end`, undefined, A);
   const endedRunner = (await req('GET', '/api/play/state', undefined, { token: tok.G1 })).data;
-  check(endedRunner.pings === undefined && endedRunner.runners.every((r) => r.transport === undefined), 'Nach Spielende: keine Pings, keine Verkehrsmittel');
+  check(endedRunner.pings === undefined && endedRunner.huntersAtPing === undefined && endedRunner.runners.every((r) => r.transport === undefined),
+    'Nach Spielende: keine Pings, keine Jäger, keine Verkehrsmittel');
 
   section('Flächen');
   const m2deg = ([y, x]) => [52.5 + y / 111320, 13.4 + x / 67770];
