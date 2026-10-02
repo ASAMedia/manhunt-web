@@ -23,6 +23,8 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Spielfeld | **Kreis oder frei gezeichnete Fläche** (z. B. entlang von Spree und S-Bahn-Ring); optional **schrumpfend** bis Spielende – bei Flächen nur, wenn sie dabei nicht aus sich herauswandern (keine U- oder L-Formen) |
 | Verkehrsmittel (Option) | Mister-X-Stil: Gejagte melden U-Bahn, S-Bahn, Bus, Tram oder zu Fuß – Jäger sehen nur die Art |
 | **Endspurt** | 5 Minuten vor Schluss Banner und Ton auf allen Handys; bei Spielende automatisch „Alle zum Treffpunkt“ mit Fußweg-Route |
+| **Spielzeit ändern** | „+10 min“ / „−10 min“ im laufenden Spiel (nur diese Runde); alle Handys bekommen Bescheid, ein schrumpfendes Spielfeld schrumpft gleichmäßig bis zum neuen Ende |
+| **Funkloch-Puffer** | „Ich wurde gefangen“, Verkehrsmittel, Block und SOS gehen ohne Netz (U-Bahn) nicht verloren: Sie warten auf dem Handy – auch über Neuladen hinweg – und werden mit dem Zeitpunkt des Tipps nachgesendet. SOS zeigt im Funkloch sofort die Notfallnummer |
 | Treffpunkt | auf der Karte mit Fußweg-Route |
 | **Kurzanleitung** | beim ersten Öffnen drei Schritte passend zur Rolle (Lobby, Gejagt, Jäger), einmal pro Handy; danach oben im Regel-Fenster |
 | Regeln | „📋 Regeln“ auf jedem Handy – Standardregeln aus den Einstellungen oder eigener Text |

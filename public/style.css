@@ -692,3 +692,8 @@ body.mission .admin-head h1 { font-size: 1.25rem; }
   body.mission #adminMap { height: 50vh; }
 }
 :root[data-theme="sun"] .timer.urgent .label { color: #fff; }
+
+/* Spielzeit ±10 min: zwei Knöpfe als Gruppe */
+.time-btns { display: inline-flex; gap: .5rem; }
+body.mission .time-btns { flex: 1 1 auto; }
+body.mission .time-btns .btn { flex: 1 1 0; }

@@ -65,6 +65,18 @@ const roleLabel = (role) => (role ? t(`role.${role}`) : t('role.none'));
 const transportLabel = (mode) => t(`transport.${mode}`);
 const GEO_TEXT_DE = { denied: 'Standortzugriff verweigert', unavailable: 'Kein GPS-Signal', timeout: 'GPS antwortet nicht' };
 
+// Funkloch-Puffer (siehe unten bei den Aktionen)
+const QUEUEABLE = new Set(['/api/play/caught', '/api/play/transport', '/api/play/block', '/api/play/sos']);
+let outbox = (() => {
+  try {
+    const o = JSON.parse(store.get('mh_outbox') || '[]');
+    return Array.isArray(o) ? o.filter((x) => QUEUEABLE.has(x?.path)) : [];
+  } catch { return []; }
+})();
+const saveOutbox = () => (outbox.length ? store.set('mh_outbox', JSON.stringify(outbox)) : store.del('mh_outbox'));
+const pending = (path) => outbox.find((o) => o.path === path);
+const outboxLabel = (o) => (o.path === '/api/play/transport' ? transportLabel(o.body.mode) : t(`outbox.${o.path.split('/').pop()}`));
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   installPrompt = e;
@@ -105,6 +117,8 @@ async function init() {
   poll();
   setInterval(renderTimers, 1000);
   setInterval(() => maybeSend(), 1000);
+  setInterval(flushOutbox, 5000);
+  window.addEventListener('online', flushOutbox);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || stopped) return;
     if (tracking && !wakeLock) requestWakeLock();
@@ -116,7 +130,8 @@ async function init() {
 // Beim Verlassen oder Entfernen: Zugangsschlüssel, Spielstände und Offline-Speicher (Seiten, Kartenbilder) löschen.
 // Einstellungen wie Ton, Sprache und Sonnenmodus bleiben.
 function clearGameData() {
-  for (const k of ['mh_token', 'mh_seen_ping', 'mh_msg_seen', 'mh_map_saved', 'mh_map_count', 'mh_check_sound', 'mh_final_warned']) store.del(k);
+  for (const k of ['mh_token', 'mh_seen_ping', 'mh_msg_seen', 'mh_map_saved', 'mh_map_count', 'mh_check_sound', 'mh_final_warned', 'mh_outbox']) store.del(k);
+  outbox = [];
   if ('caches' in window) caches.keys().then((keys) => keys.filter((k) => k.startsWith('mh-')).forEach((k) => caches.delete(k))).catch(() => {});
 }
 
@@ -236,6 +251,7 @@ async function poll() {
     setOnline(true);
     detectChanges();
     render();
+    flushOutbox(); // wieder Netz: Gespeichertes aus dem Funkloch nachsenden
   } catch (e) {
     if (!e.stale) handleError(e);
   }
@@ -322,6 +338,16 @@ function detectChanges() {
   }
   const wasArmed = prev.blockArmed;
 
+  // Spielleitung hat die Spielzeit geändert
+  if (prev.status === 'running' && room.status === 'running' && prev.endsAt && room.endsAt !== prev.endsAt) {
+    const diff = Math.round((room.endsAt - prev.endsAt) / 60000);
+    if (diff) {
+      showBanner('time', t(diff > 0 ? 'banner.timeLonger' : 'banner.timeShorter', { min: Math.abs(diff), time: fmtTime(room.endsAt) }), { cls: 'message' });
+      vibrate([200, 100, 200]);
+      sound('message');
+    }
+  }
+
   // Neuer Ping
   if (S.lastPingAt && S.lastPingAt > seenPingAt) {
     const fresh = now() - S.lastPingAt < 60000;
@@ -340,7 +366,7 @@ function detectChanges() {
       sound('ping');
     }
   }
-  prev = { status: room.status, role: me.role, emergencyAck: ackAt, blockArmed: me.blockArmed };
+  prev = { status: room.status, role: me.role, emergencyAck: ackAt, blockArmed: me.blockArmed, endsAt: room.endsAt };
 
   // Nachricht der Spielleitung
   const msg = room.message;
@@ -466,6 +492,7 @@ function renderAlerts() {
   const { room, me } = S;
   const a = [];
   if (!online) a.push(['danger', t('alert.offline')]);
+  if (outbox.length) a.push(['info', t('outbox.pending', { list: outbox.map(outboxLabel).join(', ') })]);
   // Nach Spielende sind Standort-Hinweise nur noch Rauschen
   if (room.status === 'ended') return swapIfChanged($('#alerts'), el('div', { class: 'stack' },
     a.map(([cls, text]) => el('div', { class: `alert ${cls}`, text }))));
@@ -520,8 +547,11 @@ function buildContent() {
   // Aktionen
   const actions = el('div', { class: 'stack' });
   if (room.status === 'running' && me.role === 'runner') {
-    actions.append(el('button', { class: 'btn danger solid big', type: 'button', onclick: reportCaught, text: t('btn.caught') }));
+    // Im Funkloch gespeichert: nicht noch einmal anbieten
+    if (pending('/api/play/caught')) actions.append(el('div', { class: 'alert info', text: t('outbox.caughtWaiting') }));
+    else actions.append(el('button', { class: 'btn danger solid big', type: 'button', onclick: reportCaught, text: t('btn.caught') }));
     if (me.blockArmed) actions.append(el('div', { class: 'alert info', text: t('block.armed') }));
+    else if (pending('/api/play/block')) actions.append(el('div', { class: 'alert info', text: t('outbox.blockWaiting') }));
     else if (me.blocksLeft > 0) {
       actions.append(el('button', { class: 'btn big', type: 'button', onclick: armBlock, text: t('block.button', { n: me.blocksLeft }) }));
     }
@@ -531,7 +561,8 @@ function buildContent() {
   }
   // Mister-X-Stil: Verkehrsmittel melden
   if (room.status === 'running' && me.role === 'runner' && room.transportReports) {
-    const cur = me.transport;
+    const waiting = pending('/api/play/transport');
+    const cur = waiting ? { mode: waiting.body.mode, at: waiting.body.at } : me.transport;
     actions.append(el('div', { class: 'transport-box' },
       el('div', {
         class: 'small',
@@ -837,8 +868,58 @@ async function playerAction(path, body) {
     render();
     return true;
   } catch (e) {
-    alert(e.message);
+    if (!e.status && QUEUEABLE.has(path)) queueAction(path, body);
+    else alert(e.status ? e.message : t('action.offline'));
     return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Funkloch-Puffer: „Gefangen“, Verkehrsmittel, Block und Notruf gehen ohne Netz (U-Bahn) nicht verloren.
+// Sie warten auf dem Handy (auch über ein Neuladen hinweg) und werden mit dem Zeitpunkt des Tipps nachgesendet.
+// ---------------------------------------------------------------------------
+
+function queueAction(path, body = {}) {
+  const sos = path === '/api/play/sos';
+  if (path === '/api/play/transport') outbox = outbox.filter((o) => o.path !== path); // nur die neueste Meldung zählt
+  else if (pending(path)) return;
+  // Runde merken: Was im Funkloch einer Runde getippt wurde, darf nicht in der nächsten ankommen
+  const item = { path, body: { ...body, at: now() }, round: sos ? null : S?.room.startedAt ?? null };
+  if (sos) outbox.unshift(item); else outbox.push(item); // Notruf zuerst
+  saveOutbox();
+  setOnline(false);
+  if (!sos) showBanner('outbox', t('outbox.queued'));
+  render();
+}
+
+let flushing = false;
+async function flushOutbox() {
+  if (flushing || !outbox.length || stopped || !S) return;
+  flushing = true;
+  let sent = 0;
+  try {
+    while (outbox.length) {
+      const item = outbox[0];
+      if (item.round && item.round !== S.room.startedAt) { outbox.shift(); continue; }
+      try {
+        stateVersion++;
+        S = await api('POST', item.path, item.body, auth);
+        stateVersion++;
+        outbox.shift();
+        sent++;
+        setOnline(true);
+        detectChanges();
+      } catch (e) {
+        if (!e.status) { setOnline(false); break; } // noch kein Netz – beim nächsten Versuch
+        if (e.status === 401) { handleError(e); break; }
+        outbox.shift(); // vom Server abgelehnt, z. B. Spiel vorbei oder schon erledigt
+      }
+    }
+  } finally {
+    flushing = false;
+    saveOutbox();
+    if (sent && !stopped) showBanner('outbox', t('outbox.sent'), { cls: 'message' });
+    render();
   }
 }
 
@@ -881,7 +962,11 @@ async function triggerSos() {
     showBanner('sos', t('banner.sosSent'), { cls: 'hunter' });
   } catch (e) {
     const phone = S?.room.emergencyPhone;
-    alert(t('sos.failed', { error: e.message }) + (phone ? t('sos.failedCall', { phone }) : t('sos.failedNoPhone')) + ` ${t('sos.112')}`);
+    // Ohne Netz: trotzdem sofort anrufen lassen – und den Notruf nachsenden, sobald wieder Netz da ist
+    const queued = !e.status;
+    if (queued) queueAction('/api/play/sos');
+    alert(t('sos.failed', { error: queued ? t('sos.noSignal') : e.message }) + (phone ? t('sos.failedCall', { phone }) : t('sos.failedNoPhone'))
+      + (queued ? t('sos.queued') : '') + ` ${t('sos.112')}`);
   }
 }
 

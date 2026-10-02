@@ -104,6 +104,7 @@ route('POST', '/api/admin/rooms/:id/:action', async (req, res, { id, action }) =
       if (room.status !== 'running') throw new HttpError(409, 'Das Spiel läuft nicht.');
       game.doPing(room, 'admin');
       break;
+    case 'time': game.adjustTime(room, body.minutes); break;
     case 'draw': game.drawRoles(room, body.runners); break;
     case 'message': {
       const text = cleanText(body.text, 300);

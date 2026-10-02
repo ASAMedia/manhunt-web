@@ -84,10 +84,12 @@ route('POST', '/api/play/pos', async (req) => {
   return { ok: true };
 });
 
-route('POST', '/api/play/caught', (req) => {
+// `at`: Zeitpunkt des Tipps, falls die Meldung im Funkloch auf dem Handy gewartet hat
+route('POST', '/api/play/caught', async (req) => {
   const { room, p } = authPlayer(req);
+  const { at } = await readJson(req);
   if (room.status !== 'running') throw new HttpError(409, 'Das Spiel läuft gerade nicht.');
-  game.catchRunner(room, p, 'selbst gemeldet');
+  game.catchRunner(room, p, at ? 'selbst gemeldet, im Funkloch nachgesendet' : 'selbst gemeldet', at);
   return playerView(room, p);
 });
 
@@ -128,16 +130,19 @@ route('POST', '/api/play/transport', async (req) => {
   if (!room.settings.transportReports) throw new HttpError(409, 'Verkehrsmittel-Meldungen sind in diesem Spiel aus.');
   if (room.status !== 'running' || p.role !== 'runner') throw new HttpError(409, 'Nur Gejagte melden im laufenden Spiel ihr Verkehrsmittel.');
   limitKey(`transport:${p.id}`, 30, 10 * 60e3);
-  const { mode } = await readJson(req);
+  const { mode, at } = await readJson(req);
   if (!Object.hasOwn(game.TRANSPORT, mode)) throw new HttpError(400, 'Unbekanntes Verkehrsmittel');
-  p.transport = { mode, at: Date.now() };
+  const t = game.actionTime(room, at);
+  if (p.transport && p.transport.at > t) return playerView(room, p); // ältere Meldung aus dem Funkloch überholt keine neuere
+  p.transport = { mode, at: t };
   logEvent(room, `${p.name} meldet: ${game.TRANSPORT[mode]}`);
   return playerView(room, p);
 });
 
-route('POST', '/api/play/sos', (req) => {
+route('POST', '/api/play/sos', async (req) => {
   const { room, p } = authPlayer(req);
-  game.raiseEmergency(room, p);
+  const { at } = await readJson(req);
+  game.raiseEmergency(room, p, at);
   return playerView(room, p);
 });
 

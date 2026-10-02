@@ -3,7 +3,7 @@
 // Sichten: was die Spielleitung bzw. ein Gerät vom Raum zu sehen bekommt
 
 const { playersOf } = require('./store');
-const { currentZone, roomWarnings, activeEmergency, autoDeleteAt } = require('./game');
+const { currentZone, roomWarnings, activeEmergency, autoDeleteAt, roundMinutes } = require('./game');
 
 function publicPlayer(p) {
   return {
@@ -28,6 +28,7 @@ function roomTiming(room) {
     status: room.status, startedAt: room.startedAt, huntStartsAt: room.huntStartsAt, endsAt: room.endsAt,
     endedAt: room.endedAt, nextPingAt: room.nextPingAt, result: room.result, message: room.message,
     extraPingsLeft: Math.max(0, room.settings.extraPings - room.extraPingsUsed),
+    extraMin: room.status === 'lobby' ? 0 : room.extraMin || 0,
   };
 }
 
@@ -80,7 +81,7 @@ function playerView(room, me) {
     serverTime: Date.now(),
     room: {
       name: room.name, ...zoneView(room), meetingPoint: s.meetingPoint, emergencyPhone: s.emergencyPhone || null,
-      pingIntervalMin: s.pingIntervalMin, durationMin: s.durationMin, headStartMin: s.headStartMin,
+      pingIntervalMin: s.pingIntervalMin, durationMin: room.status === 'lobby' ? s.durationMin : roundMinutes(room), headStartMin: s.headStartMin,
       pingWarningSec: s.pingWarningSec, transportReports: s.transportReports,
       shrinkEnabled: s.shrinkEnabled, shrinkFinalRadius: s.shrinkFinalRadius, rules: s.rules, blocksPerRunner: s.blocksPerRunner,
       ...roomTiming(room),

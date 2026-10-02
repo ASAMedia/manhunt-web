@@ -618,7 +618,8 @@ function renderTimers() {
   if (R.status === 'running') {
     if (t < R.huntStartsAt) items.push(timer('Vorsprung', fmtCountdown(R.huntStartsAt - t)));
     else items.push(timer('Nächster Ping', fmtCountdown(R.nextPingAt - t)));
-    items.push(timer('Spielende', fmtCountdown(R.endsAt - t), R.endsAt - t <= 5 * 60e3 ? 'urgent' : ''));
+    const extra = R.extraMin ? ` (${R.extraMin > 0 ? '+' : '−'}${Math.abs(R.extraMin)} min)` : '';
+    items.push(timer(`Spielende${extra}`, fmtCountdown(R.endsAt - t), R.endsAt - t <= 5 * 60e3 ? 'urgent' : ''));
     const total = R.players.filter((p) => p.role === 'runner' || p.wasRunner).length;
     items.push(timer('Gejagte frei', `${R.runners} von ${total}`));
     items.push(timer('Extra-Pings übrig', String(R.extraPingsLeft)));
@@ -626,6 +627,10 @@ function renderTimers() {
   $('#rTimers').replaceChildren(...items);
 }
 setInterval(renderTimers, 1000);
+
+async function changeTime(minutes) {
+  if (await act('POST', '/time', { minutes })) toast(`Spielende jetzt ${fmtTime(R.endsAt)} Uhr`);
+}
 
 function renderControls() {
   const b = (text, cls, onclick) => el('button', { class: `btn ${cls}`, type: 'button', onclick, text });
@@ -643,6 +648,13 @@ function renderControls() {
     items.push(b('Sofort-Ping', 'primary', () => {
       if (confirm('Jetzt einen Ping an alle Jäger senden? (zählt nicht als Extra-Ping)')) act('POST', '/ping');
     }));
+    // Spielzeit dieser Runde ändern – alle Handys bekommen Bescheid
+    items.push(el('span', { class: 'time-btns' },
+      el('button', { class: 'btn', type: 'button', title: 'Spielzeit um 10 Minuten verlängern', onclick: () => changeTime(10), text: '+10 min' }),
+      el('button', {
+        class: 'btn', type: 'button', title: 'Spielzeit um 10 Minuten verkürzen', text: '−10 min',
+        onclick: () => { if (confirm('Spielzeit um 10 Minuten verkürzen? Alle Handys bekommen Bescheid.')) changeTime(-10); },
+      })));
   }
   // Einsatz-Ansicht: „Alle zum Treffpunkt“ direkt erreichbar (auch für die Aufsicht)
   if (mission && R.settings.meetingPoint) items.push(b('Alle zum Treffpunkt', '', callMeeting));
@@ -1155,7 +1167,7 @@ function renderRounds() {
           el('td', { text: `${String(g.survivedMin).replace('.', ',')} min` }))))),
       el('p', {
         class: 'small muted',
-        text: `${n(r.pings.regular, 'Ping', 'Pings')}, ${n(r.pings.extra, 'Extra-Ping', 'Extra-Pings')}, ${n(r.pings.admin, 'Sofort-Ping', 'Sofort-Pings')}, ${n(r.blocks || 0, 'Block', 'Blocks')} · ${n(r.emergencies, 'Notfall', 'Notfälle')} · Ping alle ${r.settings.pingIntervalMin} min, Dauer ${r.settings.durationMin} min`,
+        text: `${n(r.pings.regular, 'Ping', 'Pings')}, ${n(r.pings.extra, 'Extra-Ping', 'Extra-Pings')}, ${n(r.pings.admin, 'Sofort-Ping', 'Sofort-Pings')}, ${n(r.blocks || 0, 'Block', 'Blocks')} · ${n(r.emergencies, 'Notfall', 'Notfälle')} · Ping alle ${r.settings.pingIntervalMin} min, Dauer ${r.settings.durationMin} min${r.settings.extraMin ? ` (${r.settings.extraMin > 0 ? '+' : '−'}${Math.abs(r.settings.extraMin)} min)` : ''}`,
       })))
     : [el('p', { class: 'small muted', text: 'Nach dem ersten Spielende steht hier, wer wann gefangen wurde.' })]));
 }

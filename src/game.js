@@ -144,17 +144,23 @@ function applySettings(room, input) {
       : 'Der End-Radius muss kleiner sein als der Spielfeld-Radius.');
   }
   room.settings = s;
-  if (room.status === 'running') schedule(room);
+  if (room.status === 'running') {
+    room.shrinkBase = null; // neues Spielfeld: Schrumpfen wieder vom Ende des Vorsprungs an rechnen
+    schedule(room);
+  }
   for (const p of playersOf(room)) updateZoneFlag(room, p, false);
   markDirty();
 }
 
 // --- Runden ------------------------------------------------------------------
 
+// Spieldauer dieser Runde: Einstellung plus Verlängerung/Verkürzung durch die Spielleitung
+const roundMinutes = (room) => room.settings.durationMin + (room.extraMin || 0);
+
 function schedule(room) {
   const s = room.settings;
   room.huntStartsAt = room.startedAt + s.headStartMin * 60e3;
-  room.endsAt = room.startedAt + s.durationMin * 60e3;
+  room.endsAt = room.startedAt + roundMinutes(room) * 60e3;
   const lastRegular = room.pings.findLast((p) => p.kind === 'regular');
   room.nextPingAt = lastRegular ? lastRegular.at + s.pingIntervalMin * 60e3 : room.huntStartsAt;
 }
@@ -179,10 +185,28 @@ function startGame(room) {
   }
   Object.assign(room, {
     status: 'running', startedAt: Date.now(), endedAt: null, pings: [], extraPingsUsed: 0, result: null,
-    roundNo: (room.roundNo || 0) + 1,
+    roundNo: (room.roundNo || 0) + 1, extraMin: 0, shrinkBase: null,
   });
   schedule(room);
   logEvent(room, `Runde ${room.roundNo} gestartet: ${runners} Gejagte, ${hunters} Jäger-Geräte`, false, true);
+}
+
+// Spielzeit im laufenden Spiel verlängern oder verkürzen (gilt nur für diese Runde)
+function adjustTime(room, minutes) {
+  if (room.status !== 'running') throw new HttpError(409, 'Die Spielzeit lässt sich nur im laufenden Spiel ändern.');
+  const d = clampInt(minutes, -60, 60);
+  if (!d) throw new HttpError(400, 'Ungültige Minutenzahl');
+  const t = Date.now();
+  const total = roundMinutes(room) + d;
+  if (total > 1440) throw new HttpError(409, 'Länger als 24 Stunden geht nicht.');
+  if (room.startedAt + total * 60e3 < t + 60e3 || total <= room.settings.headStartMin) {
+    throw new HttpError(409, 'So weit lässt sich nicht kürzen – es bliebe weniger als eine Minute. Zum Beenden „Spiel beenden“ nehmen.');
+  }
+  const zone = currentZone(room, t);
+  if (zone && room.settings.shrinkEnabled && t > room.huntStartsAt) room.shrinkBase = { at: t, radius: zone.radius };
+  room.extraMin = total - room.settings.durationMin;
+  schedule(room);
+  logEvent(room, `Spielzeit um ${Math.abs(d)} Minuten ${d > 0 ? 'verlängert' : 'verkürzt'} – Runde dauert jetzt ${total} Minuten`, false, true);
 }
 
 function endGame(room, winner, reason) {
@@ -203,7 +227,7 @@ function roundSummary(room) {
     winner: room.result.winner,
     reason: room.result.reason,
     settings: {
-      pingIntervalMin: s.pingIntervalMin, durationMin: s.durationMin, headStartMin: s.headStartMin,
+      pingIntervalMin: s.pingIntervalMin, durationMin: roundMinutes(room), extraMin: room.extraMin || 0, headStartMin: s.headStartMin,
       zoneRadius: s.zone?.radius ?? null, shrinkFinalRadius: s.shrinkEnabled && s.zone ? s.shrinkFinalRadius : null,
     },
     runners: playersOf(room).filter((p) => p.wasRunner).map((p) => ({
@@ -225,7 +249,7 @@ function backToLobby(room) {
   // Die Pings der letzten Runde bleiben bis zum nächsten Start erhalten – für das Ping-Replay am Abend
   Object.assign(room, {
     status: 'lobby', startedAt: null, huntStartsAt: null, endsAt: null, endedAt: null,
-    nextPingAt: null, result: null, extraPingsUsed: 0,
+    nextPingAt: null, result: null, extraPingsUsed: 0, extraMin: 0, shrinkBase: null,
   });
   for (const p of playersOf(room)) {
     // Gefangene sind im Spiel zu Jägern geworden – für die nächste Runde die Startrollen wiederherstellen
@@ -275,10 +299,19 @@ function armBlock(room, p) {
   logEvent(room, `${p.name} blockiert den nächsten Ping`);
 }
 
-function catchRunner(room, p, how) {
+// Zeitpunkt einer Aktion, die im Funkloch auf dem Handy gewartet hat: höchstens 30 Minuten zurück,
+// nicht vor Spielbeginn und nicht in der Zukunft – sonst gilt die Ankunftszeit
+function actionTime(room, at) {
+  const t = Date.now();
+  const n = Number(at);
+  if (!Number.isFinite(n)) return t;
+  return Math.round(Math.min(t, Math.max(n, room.startedAt || t, t - 30 * 60e3)));
+}
+
+function catchRunner(room, p, how, at) {
   if (p.role !== 'runner') throw new HttpError(409, 'Nur Gejagte können gefangen werden.');
   p.role = 'hunter';
-  p.caughtAt = Date.now();
+  p.caughtAt = actionTime(room, at);
   p.wasRunner = true;
   p.blockArmed = false;
   logEvent(room, `${p.name} wurde gefangen (${how}) und ist jetzt Jäger`, p.bot);
@@ -322,9 +355,11 @@ function currentZone(room, t = Date.now()) {
   if (!z) return null;
   const s = room.settings;
   if (!s.shrinkEnabled || room.status !== 'running' || !(s.shrinkFinalRadius < z.radius)) return { ...z };
-  const f = Math.min(1, Math.max(0, (t - room.huntStartsAt) / (room.endsAt - room.huntStartsAt)));
+  // Nach einer Zeitänderung schrumpft es von der damaligen Größe aus gleichmäßig bis zum neuen Ende weiter
+  const base = room.shrinkBase || { at: room.huntStartsAt, radius: z.radius };
+  const f = Math.min(1, Math.max(0, (t - base.at) / (room.endsAt - base.at)));
   // Kreis: Radius kleiner; Fläche: alle Ecken gleichmäßig Richtung Mitte
-  return scaleZone(z, Math.round(z.radius - (z.radius - s.shrinkFinalRadius) * f));
+  return scaleZone(z, Math.round(base.radius - (base.radius - s.shrinkFinalRadius) * f));
 }
 
 const ZONE_MARGIN_M = 20;
@@ -449,17 +484,21 @@ function simulateBots(room, dtSec) {
 
 const activeEmergency = (room, playerId) => room.emergencies.find((e) => e.playerId === playerId && !e.resolvedAt);
 
-function raiseEmergency(room, p) {
+// `at`: Zeitpunkt des Tipps, wenn der Notruf im Funkloch auf dem Handy gewartet hat (höchstens 30 min zurück)
+function raiseEmergency(room, p, at) {
   const existing = activeEmergency(room, p.id);
   if (existing) return existing;
+  const t = Date.now();
+  const n = Number(at);
+  const when = Number.isFinite(n) ? Math.round(Math.min(t, Math.max(n, t - 30 * 60e3))) : t;
   const e = {
-    id: randomId(6), playerId: p.id, name: p.name, at: Date.now(),
+    id: randomId(6), playerId: p.id, name: p.name, at: when,
     pos: p.pos ? { ...p.pos } : null, ackAt: null, resolvedAt: null, resolvedBy: null,
   };
   room.emergencies.push(e);
   // alte, erledigte Notfälle nicht endlos aufbewahren
   if (room.emergencies.length > 50) room.emergencies = room.emergencies.filter((x, i, all) => !x.resolvedAt || i >= all.length - 50);
-  logEvent(room, `NOTFALL von ${p.name}!`, false, true);
+  logEvent(room, `NOTFALL von ${p.name}!${when < t - 30e3 ? ' (im Funkloch ausgelöst, jetzt angekommen)' : ''}`, false, true);
   return e;
 }
 
@@ -530,7 +569,7 @@ function startGameTimers() {
 module.exports = {
   ROLES, TRANSPORT, defaultSettings, migrateRoom,
   createRoom, deleteRoom, applySettings,
-  startGame, endGame, backToLobby, doPing, armBlock, catchRunner, releaseRunner, drawRoles, removePlayer,
+  startGame, endGame, adjustTime, actionTime, roundMinutes, backToLobby, doPing, armBlock, catchRunner, releaseRunner, drawRoles, removePlayer,
   currentZone, updateZoneFlag, roomWarnings,
   addBots, removeBots, removeAllPlayers,
   activeEmergency, raiseEmergency, resolveEmergency,
