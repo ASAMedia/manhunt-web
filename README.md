@@ -84,7 +84,7 @@ Bei jedem Push auf `main` testet GitHub Actions den Code und baut dann das Image
 - `docker-compose.yml` (aus diesem Repo)
 - `.env` (Vorlage: `.env.example`) – mindestens `ADMIN_PASSWORD` setzen
 
-In der `.env` wählt `COMPOSE_PROFILES`, welche Zusatzdienste laufen:
+In der `.env` wählt `COMPOSE_PROFILES`, welche Zusatzdienste laufen – standardmäßig keiner (nur die App). Nur eintragen, was du brauchst:
 
 | Profil | Wofür |
 |---|---|
@@ -101,7 +101,9 @@ docker compose pull && docker compose up -d
 
 Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:packages`, selbst eingeben): `docker login ghcr.io -u ASAMedia`.
 
-> **Während der Klassenfahrt:** `autoupdate` aus `COMPOSE_PROFILES` nehmen und einmal `docker compose up -d --remove-orphans` – dann ändert sich bis zur Rückkehr nichts mehr am Server.
+> **Zusatzdienst abschalten:** Aus `COMPOSE_PROFILES` herausnehmen reicht nicht – ein schon laufender Container läuft weiter. Zusätzlich `docker compose rm -sf caddy` (bzw. `tunnel`, `autoupdate`) ausführen.
+
+> **Während der Klassenfahrt:** `autoupdate` aus `COMPOSE_PROFILES` nehmen und `docker compose rm -sf autoupdate` – dann ändert sich bis zur Rückkehr nichts mehr am Server.
 
 > **Tunnel nur zum Ausprobieren:** Beim Cloudflare-Schnelltunnel läuft der gesamte Verkehr (inkl. Standorte) für Cloudflare lesbar über dessen Server (USA), und ohne Konto gibt es keinen Auftragsverarbeitungsvertrag. Für Spiele mit Schülern daher eine eigene Domain mit dem Profil `caddy` auf einem Server in der EU nutzen.
 
@@ -109,7 +111,7 @@ Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:pa
 
 ### Hinter einem vorhandenen Reverse Proxy
 
-In der `.env`: `COMPOSE_PROFILES` ohne `caddy`/`tunnel` (höchstens `autoupdate`), `PUBLIC_URL=https://manhunt.example.de`. Die App lauscht dann auf `http://127.0.0.1:3000` (`LOCAL_PORT`). Der Proxy muss HTTPS machen, die Adresse des Handys an `X-Forwarded-For` **anhängen** (die App wertet den letzten Eintrag aus) und `X-Forwarded-Proto` setzen. Beispiel für nginx:
+In der `.env`: `COMPOSE_PROFILES` leer lassen (höchstens `autoupdate`) – **kein `caddy`**, der würde mit deinem Proxy um die Ports 80/443 streiten –, `PUBLIC_URL=https://manhunt.example.de`. Die App lauscht dann auf `http://127.0.0.1:3000` (`LOCAL_PORT`). Der Proxy muss HTTPS machen, die Adresse des Handys an `X-Forwarded-For` **anhängen** (die App wertet den letzten Eintrag aus) und `X-Forwarded-Proto` setzen. Beispiel für nginx:
 
 ```nginx
 server {

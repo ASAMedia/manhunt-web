@@ -2,8 +2,9 @@
 # Das Image wird fertig von GitHub geladen (ghcr.io); lokal mit Quellcode baut
 # docker-compose.override.yml es stattdessen selbst.
 #
-# Welche Zusatzdienste laufen, steht in der .env unter COMPOSE_PROFILES, z. B.
+# Welche Zusatzdienste laufen, steht in der .env unter COMPOSE_PROFILES (Standard: leer = nur die App), z. B.
 #   COMPOSE_PROFILES=caddy,autoupdate
+# Einen laufenden Zusatzdienst abschalten: aus COMPOSE_PROFILES nehmen und  docker compose rm -sf <dienst>
 # Dann genügt immer:  docker compose pull && docker compose up -d
 #
 #   caddy       eigene Domain mit automatischem HTTPS (Ports 80/443)

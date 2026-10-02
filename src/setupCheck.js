@@ -80,7 +80,7 @@ async function setupChecks(req) {
   add(withBots.length ? 'warn' : 'ok', 'Test-Geräte',
     withBots.length ? `Test-Geräte in ${withBots.join(', ')} – vor dem echten Spiel entfernen (Probespiel → Test-Geräte entfernen).` : 'Keine Test-Geräte in den Räumen.');
 
-  add('info', 'Automatische Updates', 'Während der Fahrt ausschalten: autoupdate aus COMPOSE_PROFILES nehmen und docker compose up -d --remove-orphans.');
+  add('info', 'Automatische Updates', 'Während der Fahrt ausschalten: autoupdate aus COMPOSE_PROFILES in der .env nehmen und docker compose rm -sf autoupdate ausführen.');
   return checks;
 }
 
