@@ -155,6 +155,13 @@ route('DELETE', '/api/admin/rooms/:id/players/:pid', (req, res, { id, pid }) => 
   return adminRoom(room);
 });
 
+route('DELETE', '/api/admin/rooms/:id/players', (req, res, { id }) => {
+  requireAdmin(req);
+  const room = getRoom(id);
+  game.removeAllPlayers(room);
+  return adminRoom(room);
+});
+
 route('DELETE', '/api/admin/rooms/:id/bots', (req, res, { id }) => {
   requireAdmin(req);
   const room = getRoom(id);

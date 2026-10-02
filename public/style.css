@@ -653,3 +653,6 @@ body.replay .leaflet-tooltip.map-label { font-size: 15px; font-weight: 700; }
   .cards { padding: 0; }
   .ncard:nth-child(6n) { break-after: page; }
 }
+
+/* Alle Geräte entfernen */
+.remove-all { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }

@@ -38,7 +38,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit, Akku |
 | Nachricht an alle | z. B. Spielabbruch; Schnellknopf „Alle zum Treffpunkt rufen“ |
 | Wiederbeitritt | QR-Code pro Gerät, falls ein Handy ausfällt |
-| Schutz vor Versehen | „Spiel verlassen“, „Aus dem Raum entfernen“, „Raum löschen“ nur durch 2 s Gedrückthalten |
+| Schutz vor Versehen | „Spiel verlassen“, „Aus dem Raum entfernen“, „Raum löschen“ nur durch 2 s Gedrückthalten; „Alle Geräte entfernen“ (nicht im laufenden Spiel) durch 3 s |
 
 **Vorbereitung & Nachbereitung**
 

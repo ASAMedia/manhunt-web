@@ -616,7 +616,19 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
   $('#pBody').addEventListener(ev, () => { setTimeout(() => { touchingPlayers = false; }, 300); });
 }
 
+// „Alle Geräte entfernen“: Knopf nur einmal bauen (sonst würde ein Neuaufbau das Gedrückthalten abbrechen)
+$('#removeAllBox').prepend(holdButton({
+  text: 'Alle Geräte entfernen (3 s gedrückt halten)', holdText: 'Weiter halten … alle werden entfernt', ms: 3000, cls: 'danger',
+  title: 'Alle Handys aus dem Raum entfernen – 3 Sekunden gedrückt halten',
+  onConfirm: async () => {
+    const n = R?.players.length || 0;
+    if (await act('DELETE', '/players')) toast(`${n} ${n === 1 ? 'Gerät' : 'Geräte'} entfernt`);
+  },
+}));
+
 function renderPlayers() {
+  // nicht im laufenden Spiel und nur, wenn es etwas zu entfernen gibt
+  $('#removeAllBox').classList.toggle('hidden', !isAdmin() || R.status === 'running' || !R.players.length);
   const players = [...R.players].sort((a, b) => (b.emergency - a.emergency)
     || (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || a.name.localeCompare(b.name, 'de'));
   $('#pTitle').textContent = `Geräte (${players.length})`;

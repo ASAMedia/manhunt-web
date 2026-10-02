@@ -140,6 +140,15 @@ export default async function review2({ base, adminPass, supPass, check, section
   await pos(rt.H2, C.lat);
   ra = (await req('GET', `/api/admin/rooms/${rm.id}`, undefined, A)).data;
   check(ra.players.length === 2 && !ra.players.some((p) => ['H1', 'H2'].includes(p.name)), 'entfernte Geräte kommen nicht zurück (auch wenn ihr Handy weiter sendet)');
+  check((await req('DELETE', `/api/admin/rooms/${rm.id}/players`, undefined, SUP)).status === 403, 'Alle entfernen: nicht für die Aufsicht');
+  await req('POST', `/api/admin/rooms/${rm.id}/start`, undefined, A);
+  const whileRunning = await req('DELETE', `/api/admin/rooms/${rm.id}/players`, undefined, A);
+  check(whileRunning.status === 409 && whileRunning.data.error.includes('Spiel beenden'), 'Alle entfernen: nicht im laufenden Spiel');
+  await req('POST', `/api/admin/rooms/${rm.id}/end`, undefined, A);
+  ra = (await req('DELETE', `/api/admin/rooms/${rm.id}/players`, undefined, A)).data;
+  const after = await Promise.all([rt.R, rt.H3].map((t) => req('GET', '/api/play/state', undefined, { token: t })));
+  check(ra.players.length === 0 && after.every((r) => r.status === 401) && ra.events.some((e) => e.text === 'Alle 2 Geräte entfernt') && ra.rounds.length === 2,
+    'Alle entfernen nach Spielende: Raum leer, Handys abgemeldet, Verlauf und Auswertung bleiben', ra.events.slice(-2));
   await req('DELETE', `/api/admin/rooms/${rm.id}`, undefined, A);
 
   section('Einrichtungs-Check');

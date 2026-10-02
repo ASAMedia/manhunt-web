@@ -400,6 +400,16 @@ function addBots(room, runners, hunters) {
   logEvent(room, `${nR + nH} Test-Geräte hinzugefügt (${nR} Gejagte, ${nH} Jäger)`, true);
 }
 
+// Alle Geräte auf einmal entfernen, z. B. für die nächste Klasse. Nicht im laufenden Spiel – das würde es
+// sonst mit „Alle Gejagten gefangen“ beenden. Einstellungen, Verlauf und Auswertung bleiben.
+function removeAllPlayers(room) {
+  if (room.status === 'running') throw new HttpError(409, 'Erst das Spiel beenden – dann lassen sich alle Geräte entfernen.');
+  const players = playersOf(room);
+  for (const p of players) removePlayer(room, p, 'admin');
+  if (players.length) logEvent(room, `Alle ${players.length} Geräte entfernt`, false, true);
+  return players.length;
+}
+
 function removeBots(room) {
   const bots = playersOf(room).filter((p) => p.bot);
   for (const p of bots) removePlayer(room, p, 'admin');
@@ -522,7 +532,7 @@ module.exports = {
   createRoom, deleteRoom, applySettings,
   startGame, endGame, backToLobby, doPing, armBlock, catchRunner, releaseRunner, drawRoles, removePlayer,
   currentZone, updateZoneFlag, roomWarnings,
-  addBots, removeBots,
+  addBots, removeBots, removeAllPlayers,
   activeEmergency, raiseEmergency, resolveEmergency,
   autoDeleteAt, autoDelete, startGameTimers,
 };
