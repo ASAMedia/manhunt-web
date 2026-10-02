@@ -251,6 +251,8 @@ export function holdButton({ text, holdText = 'Weiter halten …', ms = 2000, cl
     timer = null;
     btn.classList.remove('holding');
     btn.style.setProperty('--p', 0);
+    btn.style.width = '';
+    btn.style.height = '';
     label.textContent = text;
   };
   const begin = (e) => {
@@ -258,6 +260,11 @@ export function holdButton({ text, holdText = 'Weiter halten …', ms = 2000, cl
     e.preventDefault();
     holding++;
     start = Date.now();
+    // Größe festhalten: Der kürzere Text „Weiter halten …“ würde den Knopf schmaler machen – der Mauszeiger
+    // stünde dann daneben, der Browser meldet „verlassen“ und das Halten bräche sofort ab
+    const r = btn.getBoundingClientRect();
+    btn.style.width = `${r.width}px`;
+    btn.style.height = `${r.height}px`;
     btn.classList.add('holding');
     label.textContent = holdText;
     timer = setTimeout(() => { reset(); onConfirm(); }, ms);
