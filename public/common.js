@@ -1,20 +1,30 @@
 // Gemeinsame Hilfen für alle Seiten
 
-export async function api(method, url, body, headers = {}) {
+// `timeout` (ms): Bei hängender Verbindung (Tunnel, schwaches Netz) abbrechen – gilt dann wie „kein Netz“
+export async function api(method, url, body, headers = {}, { timeout = 0 } = {}) {
   const opts = { method, headers: { 'X-Requested-With': 'manhunt', ...headers }, credentials: 'same-origin' };
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(url, opts);
-  const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null;
-  if (!res.ok) {
-    const err = new Error(data?.error || `Fehler ${res.status}`);
-    err.status = res.status;
-    throw err;
+  const ctrl = timeout ? new AbortController() : null;
+  const timer = ctrl && setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl?.signal });
+    const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null;
+    if (!res.ok) {
+      const err = new Error(data?.error || `Fehler ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
   }
-  return data;
 }
+
+// Vorübergehende Fehler: kein Netz, Zeitüberschreitung, Server startet gerade neu (502/503/504) oder ist überlastet
+export const isTemporary = (e) => !e.status || e.status >= 500 || e.status === 408 || e.status === 429;
 
 // ---------------------------------------------------------------------------
 // Fehlerberichte: Skriptfehler auf Handys gehen an den Server (Log + Liste im Admin-Bereich).
@@ -292,7 +302,13 @@ export function unlockAudio() {
   } catch { /* kein Web Audio */ }
   return Promise.resolve();
 }
-for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, unlockAudio, { capture: true });
+// Bei Touch gibt erst das Loslassen den Ton frei (pointerup/touchend), mit der Maus schon das Drücken
+for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) document.addEventListener(ev, unlockAudio, { capture: true });
+
+// iPhone (Safari ab iOS 17): Töne auch bei eingeschaltetem Stummschalter abspielen – nur für Alarme der Spielleitung
+export function audioIgnoresSilentSwitch() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* älteres iOS */ }
+}
 
 export const audioReady = () => audioCtx?.state === 'running';
 

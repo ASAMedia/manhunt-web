@@ -147,9 +147,10 @@ route('POST', '/api/play/sos', async (req) => {
 });
 
 // Gejagte setzen einen Block: Beim nächsten Ping sehen die Jäger sie nicht
-route('POST', '/api/play/block', (req) => {
+route('POST', '/api/play/block', async (req) => {
   const { room, p } = authPlayer(req);
-  game.armBlock(room, p);
+  const { at } = await readJson(req);
+  game.armBlock(room, p, at);
   return playerView(room, p);
 });
 

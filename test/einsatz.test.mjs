@@ -96,6 +96,42 @@ export default async function einsatz({ base, adminPass, supPass, check, section
   const future = await req('POST', '/api/play/caught', { at: Date.now() + 3600e3 }, { token: ft2.Runa });
   check(future.status === 200 && future.data.me.caughtAt <= Date.now(), 'Zeitpunkt in der Zukunft → Ankunftszeit', future.data);
 
+  section('Review: Einstellungen im laufenden Spiel, doppelt nachgesendete Meldungen');
+  const { r: sr, t: st2 } = await mk('Review', { zone: { lat: 52.52, lng: 13.40, radius: 3000 }, shrinkEnabled: true, shrinkFinalRadius: 400, durationMin: 90, blocksPerRunner: 2 });
+  await req('POST', `/api/admin/rooms/${sr.id}/start`, undefined, A);
+  await req('POST', `/api/admin/rooms/${sr.id}/time`, { minutes: -20 }, A);
+  const z1 = (await req('GET', `/api/admin/rooms/${sr.id}`, undefined, A)).data.zone.radius;
+  const rulesOnly = await req('PATCH', `/api/admin/rooms/${sr.id}`, { settings: { rules: 'Nur Regeln geändert', zone: { lat: 52.52, lng: 13.40, radius: 3000 } } }, A);
+  check(rulesOnly.status === 200 && Math.abs(rulesOnly.data.zone.radius - z1) <= 5 && rulesOnly.data.extraMin === -20, 'Regeln speichern im Spiel: Spielfeld springt nicht, Verkürzung bleibt', { vorher: z1, nachher: rulesOnly.data.zone.radius, extra: rulesOnly.data.extraMin });
+  const newDur = await req('PATCH', `/api/admin/rooms/${sr.id}`, { settings: { durationMin: 60 } }, A);
+  check(newDur.status === 200 && newDur.data.extraMin === 0 && newDur.data.endsAt - newDur.data.startedAt === 60 * 60e3, 'neue Spieldauer im Formular ersetzt die Verkürzung', newDur.data.extraMin);
+  const past = await req('PATCH', `/api/admin/rooms/${sr.id}`, { settings: { durationMin: 5, headStartMin: 0 } }, A);
+  check(past.status === 200, 'kurze Dauer, die noch nicht abgelaufen ist, geht', past.data.error);
+  const tooShort2 = await req('POST', `/api/admin/rooms/${sr.id}/time`, { minutes: -10 }, A);
+  check(tooShort2.status === 409, 'dann weiter kürzen → abgelehnt statt sofortigem Spielende');
+  check((await req('GET', `/api/admin/rooms/${sr.id}`, undefined, A)).data.status === 'running', 'Spiel läuft weiter');
+  // Notruf: Antwort ging verloren, inzwischen erledigt → Nachsenden löst keinen zweiten Alarm aus
+  const tap = Date.now() - 1000;
+  await req('POST', '/api/play/sos', { at: tap }, { token: st2.Jens });
+  const e1 = (await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.find((e) => e.roomId === sr.id);
+  await req('PATCH', `/api/admin/rooms/${sr.id}/emergencies/${e1.id}`, { resolve: true }, A);
+  await req('POST', '/api/play/sos', { at: tap }, { token: st2.Jens });
+  check(!(await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.some((e) => e.roomId === sr.id), 'doppelt nachgesendeter Notruf → kein zweiter Alarm');
+  await req('POST', '/api/play/sos', { at: Date.now() }, { token: st2.Jens });
+  const e2 = (await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.find((e) => e.roomId === sr.id);
+  check(!!e2 && !e2.receivedAt, 'neuer Notruf danach kommt normal an');
+  await req('PATCH', `/api/admin/rooms/${sr.id}/emergencies/${e2.id}`, { resolve: true }, A);
+  await req('POST', '/api/play/sos', { at: Date.now() - 5 * 60e3 }, { token: st2.Runa });
+  const e3 = (await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.find((e) => e.roomId === sr.id && e.name === 'Runa');
+  check(e3?.receivedAt && e3.receivedAt - e3.at > 4 * 60e3, 'nachgesendeter Notruf: Spielleitung sieht Tipp- und Ankunftszeit', e3);
+  // Block: doppelt nachgesendet → nicht zweimal verbraucht
+  const btap = Date.now() - 500;
+  await req('POST', '/api/play/block', { at: btap }, { token: st2.Runa });
+  await req('POST', `/api/admin/rooms/${sr.id}/ping`, undefined, A); // Ping verbraucht den Block
+  const again = await req('POST', '/api/play/block', { at: btap }, { token: st2.Runa });
+  const runa = (await req('GET', '/api/play/state', undefined, { token: st2.Runa })).data.me;
+  check(again.status === 409 && runa.blocksLeft === 1, 'doppelt nachgesendeter Block wird nicht zweimal verbraucht', { status: again.status, left: runa.blocksLeft });
+
   section('Übersetzungen der neuen Texte');
   const src = fs.readFileSync(path.join(ROOT, 'public/i18n.js'), 'utf8');
   const [dePart, enPart] = src.split(/\n {2}en: \{/);

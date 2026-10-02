@@ -143,10 +143,26 @@ function applySettings(room, input) {
       ? `Der End-Radius muss kleiner sein als die Fläche (${s.zone.radius} m von der Mitte bis zur äußersten Ecke).`
       : 'Der End-Radius muss kleiner sein als der Spielfeld-Radius.');
   }
-  room.settings = s;
   if (room.status === 'running') {
-    room.shrinkBase = null; // neues Spielfeld: Schrumpfen wieder vom Ende des Vorsprungs an rechnen
+    // Neue Spieldauer im Formular ersetzt eine Verlängerung/Verkürzung dieser Runde
+    const extraMin = s.durationMin !== room.settings.durationMin ? 0 : room.extraMin || 0;
+    const total = s.durationMin + extraMin;
+    if (total <= s.headStartMin) throw new HttpError(400, 'Der Vorsprung muss kürzer als die Spieldauer sein.');
+    if (room.startedAt + total * 60e3 < Date.now() + 60e3) {
+      throw new HttpError(409, 'Mit dieser Spieldauer wäre das Spiel schon vorbei. Zum Beenden „Spiel beenden“ nehmen.');
+    }
+    // Schrumpfendes Spielfeld: Bleiben Feld und Schrumpf-Einstellungen gleich, geht es ab der jetzigen Größe
+    // gleichmäßig weiter (auch bei neuer Dauer) – nur ein neues Feld beginnt wieder beim Ende des Vorsprungs
+    const t = Date.now();
+    const before = currentZone(room, t);
+    const shrinkKey = (x) => JSON.stringify([x.zone, x.shrinkEnabled, x.shrinkFinalRadius, x.headStartMin]);
+    const same = shrinkKey(s) === shrinkKey(room.settings);
+    room.settings = s;
+    room.extraMin = extraMin;
+    room.shrinkBase = same && before && s.shrinkEnabled && t > room.huntStartsAt ? { at: t, radius: before.radius } : null;
     schedule(room);
+  } else {
+    room.settings = s;
   }
   for (const p of playersOf(room)) updateZoneFlag(room, p, false);
   markDirty();
@@ -290,12 +306,15 @@ function doPing(room, kind, by) {
   logEvent(room, `${label}: ${positions.length} Gejagte${blocked ? `, davon ${blocked} blockiert` : ''}`);
 }
 
-function armBlock(room, p) {
+function armBlock(room, p, at) {
   if (room.status !== 'running' || p.role !== 'runner') throw new HttpError(409, 'Nur Gejagte können im laufenden Spiel blocken.');
   if (p.blockArmed) throw new HttpError(409, 'Der nächste Ping ist schon blockiert.');
+  // nachgesendeter Tipp, der schon angekommen war (Antwort im Funkloch verloren): nicht noch einmal verbrauchen
+  if (at != null && p.lastBlockAt && p.lastBlockAt >= actionTime(room, at)) throw new HttpError(409, 'Dieser Block wurde schon eingesetzt.');
   if ((p.blocksUsed || 0) >= room.settings.blocksPerRunner) throw new HttpError(409, 'Keine Blocks mehr übrig.');
   p.blocksUsed = (p.blocksUsed || 0) + 1;
   p.blockArmed = true;
+  p.lastBlockAt = Date.now();
   logEvent(room, `${p.name} blockiert den nächsten Ping`);
 }
 
@@ -491,9 +510,13 @@ function raiseEmergency(room, p, at) {
   const t = Date.now();
   const n = Number(at);
   const when = Number.isFinite(n) ? Math.round(Math.min(t, Math.max(n, t - 30 * 60e3))) : t;
+  // Derselbe Tipp kam schon an (nur die Antwort ging im Funkloch verloren) und ist inzwischen erledigt: kein neuer Alarm
+  const dup = Number.isFinite(n) && room.emergencies.find((x) => x.playerId === p.id && x.at >= when - 1000);
+  if (dup) return dup;
   const e = {
     id: randomId(6), playerId: p.id, name: p.name, at: when,
     pos: p.pos ? { ...p.pos } : null, ackAt: null, resolvedAt: null, resolvedBy: null,
+    ...(when < t - 30e3 && { receivedAt: t }), // im Funkloch ausgelöst, jetzt angekommen
   };
   room.emergencies.push(e);
   // alte, erledigte Notfälle nicht endlos aufbewahren

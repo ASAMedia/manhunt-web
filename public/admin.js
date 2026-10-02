@@ -1,10 +1,11 @@
 import {
   $, api, el, fmtCountdown, fmtAge, fmtTime, ROLE_LABEL, STATUS_LABEL, getConfig, createMap, labeledMarker, meetingMarker,
-  cssVar, holdButton, isHolding, playSound, audioReady, unlockAudio, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
+  cssVar, holdButton, isHolding, playSound, audioReady, unlockAudio, audioIgnoresSilentSwitch, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
   drawZone, zoneBounds, errorContext,
 } from './common.js';
 
 errorContext.role = 'admin';
+audioIgnoresSilentSwitch(); // Notfall-Alarm soll auch bei stummgeschaltetem iPhone zu hören sein
 
 let cfg;
 let R = null;             // aktueller Raum (Admin-Sicht)
@@ -156,7 +157,10 @@ async function pollAlerts() {
   alertPolling = true;
   alertInFlightSince = Date.now();
   try {
-    alerts = await withTimeout(api('GET', '/api/admin/alerts'), 20000);
+    const a = await withTimeout(api('GET', '/api/admin/alerts'), 20000);
+    // z. B. eine Fehlerseite des Proxys statt JSON: zählt als Fehlschlag, nicht als „keine Alarme“
+    if (!Array.isArray(a?.emergencies) || !Array.isArray(a?.warnings)) throw new Error('Ungültige Antwort');
+    alerts = a;
     alertFails = 0;
   } catch (e) {
     if (e.status === 401) { alertPolling = false; alertInFlightSince = 0; return showLogin(); }
@@ -164,9 +168,13 @@ async function pollAlerts() {
   }
   alertPolling = false;
   alertInFlightSince = 0;
-  renderAlertBar();
-  updateWakeLock();
-  if (loggedIn) alertTimer = setTimeout(pollAlerts, alertFails ? 2000 : 4000);
+  try {
+    renderAlertBar();
+    updateWakeLock();
+  } finally {
+    // Die Alarm-Abfrage darf nie stehen bleiben – auch nicht nach einem Fehler beim Anzeigen
+    if (loggedIn) alertTimer = setTimeout(pollAlerts, alertFails ? 2000 : 4000);
+  }
 }
 
 const connectionLost = () => loggedIn && (alertFails >= 2 || (alertInFlightSince && Date.now() - alertInFlightSince > 12000));
@@ -178,8 +186,11 @@ async function updateWakeLock() {
     wakeLockPending = true;
     try {
       const lock = await navigator.wakeLock.request('screen');
-      wakeLock = lock;
-      lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; renderGuard(); });
+      if (!loggedIn || !(alerts.running > 0)) lock.release().catch(() => {}); // inzwischen abgemeldet oder Spiel vorbei
+      else {
+        wakeLock = lock;
+        lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; renderGuard(); });
+      }
     } catch { wakeLock = null; }
     wakeLockPending = false;
   } else if (!want && wakeLock) {
@@ -192,6 +203,8 @@ async function updateWakeLock() {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !loggedIn) return;
+  // Eine Abfrage von vor dem Sperren gilt nicht als hängend – ihr bleiben ab jetzt wieder 12 s (kein Fehlalarm beim Entsperren)
+  if (alertInFlightSince) alertInFlightSince = Date.now();
   pollAlerts(); // nach dem Aufwecken sofort nachsehen, nicht erst nach dem nächsten Takt
   updateWakeLock();
 });
@@ -278,7 +291,7 @@ function renderAlertBar() {
   emergencies.map((a) => el('div', { class: `alert-item sos ${a.ackAt ? 'acked' : 'unacked'}` },
     el('div', {},
       el('strong', { text: `🚨 NOTFALL: ${a.name}` }),
-      el('span', { text: ` · ${a.roomName} · seit ${fmtTime(a.at)} Uhr${a.ackAt ? ` · gesehen ${fmtTime(a.ackAt)}` : ''}` }),
+      el('span', { text: ` · ${a.roomName} · seit ${fmtTime(a.at)} Uhr${a.receivedAt ? ` (im Funkloch ausgelöst, angekommen ${fmtTime(a.receivedAt)} Uhr)` : ''}${a.ackAt ? ` · gesehen ${fmtTime(a.ackAt)}` : ''}` }),
       el('div', {
         class: 'small',
         text: a.pos ? `Standort von ${fmtTime(a.pos.t)} Uhr, ±${a.pos.acc ?? '?'} m` : 'Kein Standort bekannt – anrufen!',
@@ -628,8 +641,15 @@ function renderTimers() {
 }
 setInterval(renderTimers, 1000);
 
+let timeBusy = false; // Doppeltipp ergibt nicht +20 min
 async function changeTime(minutes) {
-  if (await act('POST', '/time', { minutes })) toast(`Spielende jetzt ${fmtTime(R.endsAt)} Uhr`);
+  if (timeBusy) return;
+  timeBusy = true;
+  try {
+    if (await act('POST', '/time', { minutes })) toast(`Spielende jetzt ${fmtTime(R.endsAt)} Uhr`);
+  } finally {
+    timeBusy = false;
+  }
 }
 
 function renderControls() {

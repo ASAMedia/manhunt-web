@@ -3,7 +3,7 @@ import { lang, applyI18n, langButton } from './i18n.js';
 
 // Datenschutz-Hinweise für Spieler und Eltern – Inhalt folgt der tatsächlichen Konfiguration des Servers.
 // Bei Änderungen am Verhalten der App: Text anpassen und STAND erhöhen.
-const STAND = { de: '30.09.2026', en: '30 September 2026' };
+const STAND = { de: '02.10.2026', en: '2 October 2026' };
 applyI18n();
 $('#langSlot').append(langButton());
 if (store.get('mh_token')) $('#back').href = '/play';
@@ -50,7 +50,7 @@ function content(cfg) {
             : 'The game master deletes the room including all data after the game.',
           'The game master can download the event log and the evaluation as a file (names, times, events – no coordinates) and deletes it after the event.',
           'Error reports stay in memory until the next restart and appear in the server log, which is overwritten automatically (at most 30 MB).',
-          'On your phone: an access key and game state in the browser storage, program files and viewed map images in the offline storage. They are deleted when you leave the game or the game master removes you (next time the page is open); settings (sound, language, sunlight mode) remain. Remove an installed app from your home screen.',
+          'On your phone: an access key and game state in the browser storage – without signal (e.g. in the underground) also reports not yet sent (“caught”, means of transport, block, emergency call) with the time you tapped, until they have arrived – program files and viewed map images in the offline storage. They are deleted when you leave the game or the game master removes you (next time the page is open); settings (sound, language, sunlight mode, guide already read) remain. Remove an installed app from your home screen.',
         ]],
         ['Other services', [
           cfg.tileProxy
@@ -106,7 +106,7 @@ function content(cfg) {
           : 'Die Spielleitung löscht den Raum mit allen Daten nach dem Spiel.',
         'Die Spielleitung kann Verlauf und Auswertung als Datei herunterladen (Namen, Zeiten, Ereignisse – keine Koordinaten) und löscht sie nach der Veranstaltung.',
         'Fehlerberichte bleiben bis zum nächsten Neustart im Arbeitsspeicher und stehen im Server-Protokoll, das automatisch überschrieben wird (höchstens 30 MB).',
-        'Auf deinem Handy: Zugangsschlüssel und Spielstand im Browser-Speicher, Programmdateien und angesehene Kartenbilder im Offline-Speicher. Das wird gelöscht, wenn du das Spiel verlässt oder die Spielleitung dich entfernt (beim nächsten Öffnen der Seite); Einstellungen (Ton, Sprache, Sonnenmodus) bleiben. Eine installierte App entfernst du vom Home-Bildschirm.',
+        'Auf deinem Handy: Zugangsschlüssel und Spielstand im Browser-Speicher – im Funkloch (z. B. in der U-Bahn) außerdem noch nicht gesendete Meldungen („gefangen“, Verkehrsmittel, Block, Notruf) mit der Uhrzeit des Tippens, bis sie angekommen sind –, Programmdateien und angesehene Kartenbilder im Offline-Speicher. Das wird gelöscht, wenn du das Spiel verlässt oder die Spielleitung dich entfernt (beim nächsten Öffnen der Seite); Einstellungen (Ton, Sprache, Sonnenmodus, Kurzanleitung gelesen) bleiben. Eine installierte App entfernst du vom Home-Bildschirm.',
       ]],
       ['Weitere Dienste', [
         cfg.tileProxy

@@ -193,7 +193,7 @@ route('GET', '/api/admin/alerts', (req) => {
       const p = room.players[e.playerId];
       emergencies.push({
         id: e.id, roomId: room.id, roomName: room.name, playerId: e.playerId, name: e.name,
-        at: e.at, ackAt: e.ackAt, pos: p?.pos || e.pos, lastSeen: p?.lastSeen ?? null,
+        at: e.at, receivedAt: e.receivedAt ?? null, ackAt: e.ackAt, pos: p?.pos || e.pos, lastSeen: p?.lastSeen ?? null,
       });
     }
     warnings.push(...game.roomWarnings(room));

@@ -1,6 +1,6 @@
 import {
   $, api, el, store, fmtCountdown, fmtTime, distanceM, createMap, labeledMarker, meetingMarker, cssVar, getConfig,
-  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone, zoneBounds, errorContext,
+  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, isTemporary, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone, zoneBounds, errorContext,
 } from './common.js';
 import { t, lang, applyI18n, langButton, langHeader } from './i18n.js';
 
@@ -60,6 +60,7 @@ let installPrompt = null;
 let mapSave = { state: 'idle', done: 0, total: 0, ok: 0 };
 
 const now = () => Date.now() + clockOffset;
+const ACTION_TIMEOUT = 10000; // Meldungen und Notruf: nach 10 s ohne Antwort gilt „kein Netz“
 const sound = (name) => { if (soundOn) playSound(SOUNDS[name]); };
 const roleLabel = (role) => (role ? t(`role.${role}`) : t('role.none'));
 const transportLabel = (mode) => t(`transport.${mode}`);
@@ -244,7 +245,7 @@ async function poll() {
   if (stopped) return;
   const v = stateVersion;
   try {
-    const s = await api('GET', '/api/play/state', undefined, auth);
+    const s = await api('GET', '/api/play/state', undefined, auth, { timeout: 15000 });
     if (v !== stateVersion) throw Object.assign(new Error('veraltet'), { stale: true });
     clockOffset = s.serverTime - Date.now();
     S = s;
@@ -862,14 +863,15 @@ async function saveMap() {
 async function playerAction(path, body) {
   stateVersion++;
   try {
-    S = await api('POST', path, body, auth);
+    S = await api('POST', path, body, auth, { timeout: ACTION_TIMEOUT });
     stateVersion++;
     detectChanges();
     render();
     return true;
   } catch (e) {
-    if (!e.status && QUEUEABLE.has(path)) queueAction(path, body);
-    else alert(e.status ? e.message : t('action.offline'));
+    if (e.status === 401) handleError(e);
+    else if (isTemporary(e) && QUEUEABLE.has(path)) queueAction(path, body);
+    else alert(isTemporary(e) ? t('action.offline') : e.message);
     return false;
   }
 }
@@ -884,7 +886,8 @@ function queueAction(path, body = {}) {
   if (path === '/api/play/transport') outbox = outbox.filter((o) => o.path !== path); // nur die neueste Meldung zählt
   else if (pending(path)) return;
   // Runde merken: Was im Funkloch einer Runde getippt wurde, darf nicht in der nächsten ankommen
-  const item = { path, body: { ...body, at: now() }, round: sos ? null : S?.room.startedAt ?? null };
+  // … und den Zugang: Wird das Handy später für jemand anderen genutzt, geht nichts unter falschem Namen raus
+  const item = { path, body: { ...body, at: now() }, round: sos ? null : S?.room.startedAt ?? null, token };
   if (sos) outbox.unshift(item); else outbox.push(item); // Notruf zuerst
   saveOutbox();
   setOnline(false);
@@ -898,21 +901,24 @@ async function flushOutbox() {
   flushing = true;
   let sent = 0;
   try {
+    // Einträge immer per Identität entfernen: Während eine Anfrage läuft, kann vorne ein Notruf dazukommen
+    const drop = (item) => { outbox = outbox.filter((o) => o !== item); };
     while (outbox.length) {
       const item = outbox[0];
-      if (item.round && item.round !== S.room.startedAt) { outbox.shift(); continue; }
+      if ((item.round && item.round !== S.room.startedAt) || (item.token && item.token !== token)) { drop(item); continue; }
       try {
         stateVersion++;
-        S = await api('POST', item.path, item.body, auth);
+        S = await api('POST', item.path, item.body, auth, { timeout: ACTION_TIMEOUT });
         stateVersion++;
-        outbox.shift();
+        drop(item);
         sent++;
         setOnline(true);
         detectChanges();
       } catch (e) {
-        if (!e.status) { setOnline(false); break; } // noch kein Netz – beim nächsten Versuch
         if (e.status === 401) { handleError(e); break; }
-        outbox.shift(); // vom Server abgelehnt, z. B. Spiel vorbei oder schon erledigt
+        if (isTemporary(e)) { setOnline(false); break; } // kein Netz oder Server startet neu – später erneut
+        drop(item); // vom Server abgelehnt, z. B. Spiel vorbei oder schon erledigt
+        if (item.path === '/api/play/sos') sosFailedAlert(e, false); // einen Notruf nie stillschweigend verwerfen
       }
     }
   } finally {
@@ -954,20 +960,27 @@ async function triggerSos() {
   if (!tracking) startTracking();
   maybeSend(true);
   stateVersion++;
+  showBanner('sos', t('sos.sending'), { cls: 'hunter', sticky: true });
   try {
-    S = await api('POST', '/api/play/sos', undefined, auth);
+    S = await api('POST', '/api/play/sos', { at: now() }, auth, { timeout: ACTION_TIMEOUT });
     stateVersion++;
     detectChanges();
     render();
     showBanner('sos', t('banner.sosSent'), { cls: 'hunter' });
   } catch (e) {
-    const phone = S?.room.emergencyPhone;
+    document.getElementById('banner-sos')?.remove();
+    if (e.status === 401) return handleError(e);
     // Ohne Netz: trotzdem sofort anrufen lassen – und den Notruf nachsenden, sobald wieder Netz da ist
-    const queued = !e.status;
+    const queued = isTemporary(e);
     if (queued) queueAction('/api/play/sos');
-    alert(t('sos.failed', { error: queued ? t('sos.noSignal') : e.message }) + (phone ? t('sos.failedCall', { phone }) : t('sos.failedNoPhone'))
-      + (queued ? t('sos.queued') : '') + ` ${t('sos.112')}`);
+    sosFailedAlert(e, queued);
   }
+}
+
+function sosFailedAlert(e, queued) {
+  const phone = S?.room.emergencyPhone;
+  alert(t('sos.failed', { error: queued ? t('sos.noSignal') : e.message }) + (phone ? t('sos.failedCall', { phone }) : t('sos.failedNoPhone'))
+    + (queued ? t('sos.queued') : '') + ` ${t('sos.112')}`);
 }
 
 function cancelSos() {
@@ -1014,8 +1027,16 @@ function guideSteps(key) {
     el('p', { class: 'small', text: t('guide.sos') }));
 }
 
+let guideRunningChecked = false;
 function maybeShowGuide() {
-  const key = tracking && !stopped ? guideKey() : null;
+  if (!tracking || stopped) return;
+  // Im laufenden Spiel nur beim ersten Anzeigen nach „Loslegen“ – nicht mitten in der Jagd (z. B. nach dem Fangen),
+  // dort würde das Fenster Karte und SOS-Knopf verdecken
+  if (S?.room.status === 'running') {
+    if (guideRunningChecked) return;
+    guideRunningChecked = true;
+  }
+  const key = guideKey();
   const ov = $('#infoOverlay');
   if (!key || guideSeen().has(key) || !ov.classList.contains('hidden') || isHolding()) return;
   const close = () => {
