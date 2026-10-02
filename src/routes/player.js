@@ -24,7 +24,11 @@ route('GET', '/api/join/:code', (req, res, { code }) => {
   // großzügig, weil eine ganze Klasse oft über dasselbe WLAN (eine IP) beitritt
   rateLimit(req, 'join-info', 300, 60e3);
   const room = roomByCode(code);
-  return { name: room.name, joinOpen: room.joinOpen, status: room.status };
+  // Schickt das Handy sein gespeichertes Token mit, erfährt es, ob es schon in genau diesem Raum ist
+  // (dann zurück ins Spiel statt doppelt beizutreten) – ohne dass Handys den Raumcode im Spielstand brauchen
+  const ref = tokenIndex.get(req.headers['x-player-token']);
+  const member = !!ref && ref.roomId === room.id && Object.hasOwn(room.players, ref.playerId);
+  return { name: room.name, joinOpen: room.joinOpen, status: room.status, member };
 });
 
 route('POST', '/api/join/:code', async (req, res, { code }) => {

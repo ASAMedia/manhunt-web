@@ -119,6 +119,14 @@ export default async function review2({ base, adminPass, supPass, check, section
   const errs = (await req('GET', '/api/admin/client-errors', undefined, A)).data;
   check(errRes.status === 200 && errs.some((e) => e.page === '/j/…') && !JSON.stringify(errs).includes(room.code), 'Fehlerberichte ohne Spielcode');
 
+  section('Wiederkommen nach geschlossenem Tab');
+  const again = (await req('GET', `/api/join/${room.code}`, undefined, { token: tok.G1 })).data;
+  const fresh = (await req('GET', `/api/join/${room.code}`)).data;
+  check(again.member === true && fresh.member === false, 'erneuter QR-Scan mit gespeichertem Spiel erkennt das bestehende Gerät (zurück ins Spiel statt doppelt)');
+  const other = (await req('POST', '/api/admin/rooms', { name: 'Anderer Raum' }, A)).data;
+  check((await req('GET', `/api/join/${other.code}`, undefined, { token: tok.G1 })).data.member === false, 'Token aus einem anderen Raum zählt nicht');
+  await req('DELETE', `/api/admin/rooms/${other.id}`, undefined, A);
+
   section('Geräte entfernen');
   const rm = (await req('POST', '/api/admin/rooms', { name: 'Entfernen' }, A)).data;
   const rt = {};

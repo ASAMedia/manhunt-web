@@ -7,21 +7,16 @@ $('#langSlot').append(langButton());
 const code = location.pathname.split('/').pop().toUpperCase();
 
 async function init() {
-  // Wer den QR-Code erneut scannt, landet wieder in seinem bestehenden Spiel statt doppelt beizutreten
+  // Wer den QR-Code erneut scannt (z. B. nach versehentlich geschlossenem Tab), landet wieder in seinem
+  // bestehenden Spiel statt doppelt beizutreten
   const token = store.get('mh_token');
-  if (token) {
-    try {
-      const s = await api('GET', '/api/play/state', undefined, { 'X-Player-Token': token, ...langHeader });
-      if (s.room.code === code) return location.replace('/play');
-    } catch { /* altes Token ungültig – neu beitreten */ }
-  }
-
   let room;
   try {
-    room = await api('GET', `/api/join/${encodeURIComponent(code)}`, undefined, langHeader);
+    room = await api('GET', `/api/join/${encodeURIComponent(code)}`, undefined, { ...langHeader, ...(token && { 'X-Player-Token': token }) });
   } catch (e) {
     return showProblem(e.message);
   }
+  if (room.member) return location.replace('/play');
   $('#roomName').textContent = room.name;
   document.title = `Manhunt – ${room.name}`;
   if (!room.joinOpen) return showProblem(t('join.closed'));
@@ -39,7 +34,7 @@ function showProblem(text) {
 
 $('#joinForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = e.submitter;
+  const btn = e.submitter || $('#joinForm button');
   btn.disabled = true;
   $('#err').textContent = '';
   try {
