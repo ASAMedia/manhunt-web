@@ -141,11 +141,10 @@ export default async function golive({ base, adminPass, supPass, check, section 
 
   // Kartenkacheln: Gebiet und Zoom begrenzt
   const far9 = await req('GET', `/tiles/9/${lon2tile(0, 9)}/${lat2tile(0, 9)}.png`);
-  check(far9.status === 404, 'Zoom 9 weit weg = 404');
+  check(far9.status === 200, 'Zoom 9 weit weg: geladen (Karte frei verschiebbar)');
   const east = { lat: 52.517, lng: 13.68 }; // 20 km östlich der Mitte, in keinem Spielfeld
   const z17 = `/tiles/17/${lon2tile(east.lng, 17)}/${lat2tile(east.lat, 17)}.png`;
-  check((await req('GET', z17)).status === 404, 'Detail-Kachel außerhalb der Spielfelder für Spieler = 404');
-  check((await req('GET', z17, undefined, A)).status === 200, 'Spielleitung darf rund um die Kartenmitte alles');
+  check((await req('GET', z17)).status === 200, 'Detail-Kachel außerhalb der Spielfelder: auch für Spieler geladen');
   check((await req('GET', `/tiles/16/${lon2tile(east.lng, 16)}/${lat2tile(east.lat, 16)}.png`)).status === 200, 'Stadtebene (Zoom 16) für alle');
   check((await req('GET', `/tiles/19/${lon2tile(13.3889, 19)}/${lat2tile(52.517, 19)}.png`, undefined, A)).status === 404, 'Zoom 19 wird nie geholt');
 

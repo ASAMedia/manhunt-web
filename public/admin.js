@@ -224,6 +224,7 @@ function warnGroupItem(list) {
 }
 
 async function ackWarnings(list) {
+  bumpRoom();
   try {
     await Promise.all(list.map((w) => api('POST', `/api/admin/rooms/${w.roomId}/players/${w.playerId}/ack`, { type: w.type })));
     await pollAlerts();
@@ -233,6 +234,7 @@ async function ackWarnings(list) {
 const ackWarning = (w) => ackWarnings([w]);
 
 async function emergencyAction(a, body) {
+  bumpRoom();
   try {
     await api('PATCH', `/api/admin/rooms/${a.roomId}/emergencies/${a.id}`, body);
     await pollAlerts();
@@ -287,7 +289,10 @@ async function loadList() {
   } catch (e) {
     return handleError(e);
   }
-  if (!roomId) pollTimer = setTimeout(loadList, 5000);
+  if (!roomId) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(loadList, 5000);
+  }
 }
 
 $('#newRoomForm').addEventListener('submit', async (e) => {
@@ -415,18 +420,27 @@ async function openRoom(id) {
   await loadRoom();
 }
 
+// Zählt Aktionen mit: Eine Abfrage, während der eine Aktion lief (z. B. Gerät entfernt), bringt einen älteren
+// Stand – sie wird verworfen, sonst taucht das entfernte Gerät für ein paar Sekunden wieder auf.
+let roomVersion = 0;
+const bumpRoom = () => { roomVersion++; };
+
 async function loadRoom() {
   clearTimeout(pollTimer);
   const id = roomId;
+  const v = roomVersion;
   try {
     const room = await api('GET', `/api/admin/rooms/${id}`);
     if (id !== roomId) return;
-    setRoom(room);
+    if (v === roomVersion) setRoom(room);
   } catch (e) {
     if (e.status === 404) { toast('Raum nicht gefunden', true); location.hash = ''; return; }
     handleError(e);
   }
-  if (roomId === id) pollTimer = setTimeout(loadRoom, 3000);
+  if (roomId === id) {
+    clearTimeout(pollTimer); // nie zwei Abfrage-Schleifen gleichzeitig
+    pollTimer = setTimeout(loadRoom, 3000);
+  }
 }
 
 function setRoom(room) {
@@ -437,8 +451,11 @@ function setRoom(room) {
 
 // Aktion ausführen und Raum mit der Antwort neu zeichnen
 async function act(method, path, body) {
+  bumpRoom();
   try {
-    setRoom(await api(method, `/api/admin/rooms/${roomId}${path}`, body));
+    const room = await api(method, `/api/admin/rooms/${roomId}${path}`, body);
+    bumpRoom(); // auch Abfragen, die während der Aktion gestartet sind, verwerfen
+    setRoom(room);
     return true;
   } catch (e) {
     handleError(e);
@@ -593,14 +610,22 @@ $('#qr').addEventListener('click', showJoinQr);
 
 const ROLE_ORDER = { runner: 0, hunter: 1, null: 2 };
 
+let touchingPlayers = false;
+$('#pBody').addEventListener('pointerdown', () => { touchingPlayers = true; });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+  $('#pBody').addEventListener(ev, () => { setTimeout(() => { touchingPlayers = false; }, 300); });
+}
+
 function renderPlayers() {
   const players = [...R.players].sort((a, b) => (b.emergency - a.emergency)
     || (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || a.name.localeCompare(b.name, 'de'));
   $('#pTitle').textContent = `Geräte (${players.length})`;
   $('#drawN').max = Math.max(1, players.length - 1);
   $('#drawForm').classList.toggle('hidden', R.status !== 'lobby');
-  // Nicht neu zeichnen, während eine Rollen-Auswahl offen ist
+  // Nicht neu zeichnen, während eine Rollen-Auswahl offen ist oder gerade jemand auf die Liste tippt –
+  // sonst geht der Tipp auf „⋯“ oder „Gefangen“ verloren, weil der Knopf mitten im Tippen ersetzt wird
   if ($('#pBody').contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+  if (touchingPlayers) return;
   const t = now();
   $('#pBody').replaceChildren(...players.map((p) => playerRow(p, t)));
   if (!players.length) $('#pBody').append(el('tr', {}, el('td', { colspan: 5, class: 'muted', text: 'Noch niemand beigetreten.' })));

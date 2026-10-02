@@ -219,20 +219,26 @@ async function sendPosition() {
 // ---------------------------------------------------------------------------
 
 let pollTimer = null;
+let stateVersion = 0; // steigt bei jeder eigenen Aktion – ältere Abfragen werden verworfen
 async function poll() {
   clearTimeout(pollTimer);
   if (stopped) return;
+  const v = stateVersion;
   try {
     const s = await api('GET', '/api/play/state', undefined, auth);
+    if (v !== stateVersion) throw Object.assign(new Error('veraltet'), { stale: true });
     clockOffset = s.serverTime - Date.now();
     S = s;
     setOnline(true);
     detectChanges();
     render();
   } catch (e) {
-    handleError(e);
+    if (!e.stale) handleError(e);
   }
-  if (!stopped) pollTimer = setTimeout(poll, pollDelay());
+  if (!stopped) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, pollDelay());
+  }
 }
 
 // Akku sparen: Jäger im Spiel brauchen Pings und Mitjäger schnell, alle anderen seltener
@@ -778,8 +784,10 @@ async function saveMap() {
 // ---------------------------------------------------------------------------
 
 async function playerAction(path, body) {
+  stateVersion++;
   try {
     S = await api('POST', path, body, auth);
+    stateVersion++;
     detectChanges();
     render();
     return true;
@@ -819,8 +827,10 @@ async function triggerSos() {
   vibrate([150]);
   if (!tracking) startTracking();
   maybeSend(true);
+  stateVersion++;
   try {
     S = await api('POST', '/api/play/sos', undefined, auth);
+    stateVersion++;
     detectChanges();
     render();
     showBanner('sos', t('banner.sosSent'), { cls: 'hunter' });

@@ -119,6 +119,29 @@ export default async function review2({ base, adminPass, supPass, check, section
   const errs = (await req('GET', '/api/admin/client-errors', undefined, A)).data;
   check(errRes.status === 200 && errs.some((e) => e.page === '/j/…') && !JSON.stringify(errs).includes(room.code), 'Fehlerberichte ohne Spielcode');
 
+  section('Geräte entfernen');
+  const rm = (await req('POST', '/api/admin/rooms', { name: 'Entfernen' }, A)).data;
+  const rt = {};
+  for (const n of ['R', 'H1', 'H2', 'H3']) rt[n] = (await req('POST', `/api/join/${rm.code}`, { name: n })).data.token;
+  let ra = (await req('GET', `/api/admin/rooms/${rm.id}`, undefined, A)).data;
+  const rid = (n) => ra.players.find((p) => p.name === n)?.id;
+  for (const [n, role] of [['R', 'runner'], ['H1', 'hunter'], ['H2', 'hunter'], ['H3', 'hunter']]) {
+    await req('PATCH', `/api/admin/rooms/${rm.id}/players/${rid(n)}`, { role }, A);
+  }
+  await req('POST', `/api/admin/rooms/${rm.id}/start`, undefined, A);
+  ra = (await req('DELETE', `/api/admin/rooms/${rm.id}/players/${rid('H1')}`, undefined, A)).data;
+  const gone = await req('GET', '/api/play/state', undefined, { token: rt.H1 });
+  check(!ra.players.some((p) => p.name === 'H1') && gone.status === 401 && ra.status === 'running', 'im laufenden Spiel entfernt: weg aus der Liste, Handy abgemeldet');
+  await req('POST', `/api/admin/rooms/${rm.id}/end`, undefined, A);
+  ra = (await req('POST', `/api/admin/rooms/${rm.id}/lobby`, undefined, A)).data;
+  ra = (await req('DELETE', `/api/admin/rooms/${rm.id}/players/${rid('H2')}`, undefined, A)).data;
+  check(!ra.players.some((p) => p.name === 'H2') && (await req('GET', '/api/play/state', undefined, { token: rt.H2 })).status === 401,
+    'nach „Neue Runde“ in der Lobby entfernt: weg aus der Liste, Handy abgemeldet');
+  await pos(rt.H2, C.lat);
+  ra = (await req('GET', `/api/admin/rooms/${rm.id}`, undefined, A)).data;
+  check(ra.players.length === 2 && !ra.players.some((p) => ['H1', 'H2'].includes(p.name)), 'entfernte Geräte kommen nicht zurück (auch wenn ihr Handy weiter sendet)');
+  await req('DELETE', `/api/admin/rooms/${rm.id}`, undefined, A);
+
   section('Einrichtungs-Check');
   const sc = (await req('GET', '/api/admin/setup-check', undefined, A)).data;
   const byTitle = (t) => sc.checks?.find((c) => c.title === t);

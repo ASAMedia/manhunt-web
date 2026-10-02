@@ -3,19 +3,18 @@
 // Kartenkacheln: Zwischenspeicher auf diesem Server
 // Jede Kachel wird nur einmal vom Kartenanbieter geholt (max. 2 gleichzeitig, mit eigener Kennung),
 // 7 Tage gespeichert und an alle Handys ausgeliefert. Die Handys sprechen dadurch nur mit diesem Server.
-// Damit niemand den Server als allgemeinen Kachel-Proxy missbraucht (und OpenStreetMap ihn sperrt),
-// gibt es Grenzen: Gebiet, Zoomstufe, Warteschlange, Abrufe pro Stunde und Größe des Speichers.
+// Die Karte ist überall verschiebbar. Damit niemand den Server als allgemeinen Kachel-Proxy missbraucht
+// (und OpenStreetMap ihn sperrt), sind die Downloads beim Kartenanbieter begrenzt: pro Netz und Stunde,
+// insgesamt pro Stunde, Warteschlange, Zoomstufe und Größe des Speichers.
 
 const fs = require('node:fs');
 const path = require('node:path');
 const { TILE_DIR, TILE_URL, TILE_CACHE_DAYS, TILE_PROXY, MAP_CENTER, PUBLIC_URL } = require('./config');
-const { HttpError, distanceM } = require('./util');
-const { state } = require('./store');
-const { rateLimit, sessionRole } = require('./http');
+const { HttpError } = require('./util');
+const { rateLimit } = require('./http');
 
 const MAX_ZOOM = 18;                  // darüber vergrößert die Karte selbst (maxNativeZoom)
-const CENTER_RADIUS_M = 30000;        // Stadtgebiet um die Kartenmitte
-const ZONE_MARGIN_M = 5000;           // Rand um jedes Spielfeld
+const FETCHES_PER_HOUR_PER_NET = 2000; // Downloads beim Kartenanbieter pro Netz (IPv4-Adresse bzw. IPv6-/64)
 const MAX_QUEUE = 100;                // wartende Abrufe beim Kartenanbieter
 const FETCHES_PER_HOUR = 5000;        // Abrufe beim Kartenanbieter pro Stunde (alle Handys zusammen)
 const MAX_CACHE_BYTES = (Number(process.env.TILE_CACHE_MAX_MB) || 1000) * 1048576;
@@ -34,25 +33,6 @@ const tileSlot = () => new Promise((resolve) => {
 function tileRelease() {
   const next = tileQueue.shift();
   if (next) next(); else tileActive--;
-}
-
-const tile2lng = (x, z) => (x / 2 ** z) * 360 - 180;
-const tile2lat = (y, z) => {
-  const n = Math.PI - (2 * Math.PI * y) / 2 ** z;
-  return (180 / Math.PI) * Math.atan(Math.sinh(n));
-};
-
-// Übersichtskarten (bis Zoom 8) überall; Stadtebene (bis Zoom 16) rund um die Kartenmitte;
-// Details im Spielfeld jedes Raums. Die angemeldete Spielleitung darf rund um die Kartenmitte alles (Spielfeld wählen).
-function tileAllowed(z, x, y, staff) {
-  if (z > MAX_ZOOM) return false;
-  if (z <= 8) return true;
-  const c = { lat: tile2lat(y + 0.5, z), lng: tile2lng(x + 0.5, z) };
-  if ((z <= 16 || staff) && distanceM({ lat: MAP_CENTER[0], lng: MAP_CENTER[1] }, c) < CENTER_RADIUS_M) return true;
-  return Object.values(state.rooms).some((r) => {
-    const zone = r.settings.zone;
-    return zone && distanceM(zone, c) < zone.radius + ZONE_MARGIN_M;
-  });
 }
 
 function checkBudget() {
@@ -96,11 +76,11 @@ async function serveTile(req, res, z, x, y) {
   if (stat && Date.now() - stat.mtimeMs < TILE_CACHE_DAYS * 86400e3) {
     buf = await fs.promises.readFile(file);
   } else {
-    if (!stat && !tileAllowed(z, x, y, !!sessionRole(req))) throw new HttpError(404, 'Kachel außerhalb des Spielgebiets');
+    if (!stat && z > MAX_ZOOM) throw new HttpError(404, 'Keine Kachel');
     const key = `${z}/${x}/${y}`;
     try {
       if (!tileInflight.has(key)) {
-        rateLimit(req, 'tile-fetch', 600, 60e3);
+        rateLimit(req, 'tile-fetch', FETCHES_PER_HOUR_PER_NET, 3600e3);
         checkBudget();
         tileInflight.set(key, fetchTile(z, x, y, file).finally(() => tileInflight.delete(key)));
       }

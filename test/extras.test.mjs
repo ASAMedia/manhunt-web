@@ -93,7 +93,7 @@ export default async function extras({ base, adminPass, check, section, tiles })
   const t2 = await req('GET', `/tiles/${z}/${x}/${y}.png`);
   check(t2.status === 200 && tiles.hits === before + 1, 'zweiter Abruf aus dem Zwischenspeicher');
   const far = await req('GET', `/tiles/${z}/${lon2tile(0, z)}/${lat2tile(0, z)}.png`);
-  check(far.status === 404 && tiles.hits === before + 1, 'Kachel weit weg vom Spiel wird nicht geholt');
+  check(far.status === 200 && tiles.hits === before + 2, 'Kachel weit weg vom Spiel wird auch geholt (Karte frei verschiebbar)');
   check((await req('GET', '/tiles/25/1/1.png')).status === 404, 'ungültige Zoomstufe = 404');
 
   await req('DELETE', `/api/admin/rooms/${room.id}`, undefined, A);
