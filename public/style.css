@@ -656,3 +656,39 @@ body.replay .leaflet-tooltip.map-label { font-size: 15px; font-weight: 700; }
 
 /* Alle Geräte entfernen */
 .remove-all { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }
+
+/* Endspurt: die letzten 5 Minuten */
+.timer.urgent { background: var(--danger-solid); color: #fff; }
+.timer.urgent .label { color: #fff; }
+
+/* Kurzanleitung beim ersten Öffnen */
+.guide h2 { margin: 0; }
+.guide-steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: .55rem; font-size: 1.05rem; }
+.guide-card .linkish { align-self: center; }
+
+/* Alarm-Absicherung der Spielleitung */
+.guard-line {
+  display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center;
+  margin-bottom: 1rem; padding: .5rem .75rem;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: .875rem;
+}
+.guard-item.ok > span:first-child { color: var(--ok); font-weight: 700; }
+.guard-item.warn { color: var(--danger); }
+.guard-item.warn > span:first-child { font-weight: 700; }
+
+/* Einsatz-Ansicht (Handy im laufenden Spiel): nur das Nötigste */
+body.mission .mission-hide { display: none !important; }
+/* Warnungen kompakt: Name und Knöpfe reichen, die Erklärung kennt die Spielleitung */
+body.mission .alert-bar .warn-detail { display: none; }
+body.mission .alert-bar { max-height: 38vh; gap: 6px; }
+body.mission .alert-bar .alert-item { padding: 6px 10px; }
+body.mission #controls .btn { flex: 1 1 auto; min-height: 2.75rem; }
+body.mission .admin-head { margin-bottom: .5rem; }
+body.mission .admin-head h1 { font-size: 1.25rem; }
+@media (max-width: 760px) {
+  body.mission .status-line { gap: .4rem; width: 100%; }
+  body.mission .status-line .timer { flex: 1 1 40%; padding: .3rem .55rem; }
+  body.mission .status-line .timer .value { font-size: 1.15rem; }
+  body.mission #adminMap { height: 50vh; }
+}
+:root[data-theme="sun"] .timer.urgent .label { color: #fff; }

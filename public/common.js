@@ -288,8 +288,9 @@ let audioCtx = null;
 export function unlockAudio() {
   try {
     audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx.state === 'suspended') return audioCtx.resume().catch(() => {});
   } catch { /* kein Web Audio */ }
+  return Promise.resolve();
 }
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, unlockAudio, { capture: true });
 
@@ -303,6 +304,7 @@ export const SOUNDS = {
   message: [[988, 110, 70], [988, 110, 70], [988, 240]],
   alarm: [[1400, 240, 60], [900, 240, 60], [1400, 240, 60], [900, 240]],
   warn: [[520, 200, 120], [520, 200]],
+  final: [[784, 160, 80], [784, 160, 80], [784, 160, 80], [1175, 420]],
 };
 
 export function playSound(pattern) {

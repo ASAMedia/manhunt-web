@@ -12,6 +12,7 @@ import autodelete from './autodelete.test.mjs';
 import golive from './golive.test.mjs';
 import flaecheAkkuReplay from './flaeche-akku-replay.test.mjs';
 import review2 from './review2.test.mjs';
+import einsatz from './einsatz.test.mjs';
 
 const r = results();
 const secret = () => crypto.randomBytes(9).toString('base64url');
@@ -32,7 +33,7 @@ const srv = await startServer({
 });
 
 const ctx = { base: srv.base, adminPass, supPass, check: r.check, section: r.section, tiles };
-for (const [name, suite] of [['Grundfunktionen', basics], ['Neue Funktionen', features], ['Blocks, Check, App, Karten', extras], ['Vor dem Live-Gang', golive], ['Fläche, Akku, Replay', flaecheAkkuReplay], ['Zweite Prüfung', review2]]) {
+for (const [name, suite] of [['Grundfunktionen', basics], ['Neue Funktionen', features], ['Blocks, Check, App, Karten', extras], ['Vor dem Live-Gang', golive], ['Fläche, Akku, Replay', flaecheAkkuReplay], ['Zweite Prüfung', review2], ['Einsatz', einsatz]]) {
   r.suite(name);
   try {
     await suite(ctx);

@@ -200,6 +200,8 @@ route('GET', '/api/admin/alerts', (req) => {
   return {
     emergencies: emergencies.sort((a, b) => a.at - b.at),
     warnings: warnings.sort((a, b) => a.since - b.since),
+    // laufende Spiele: Die Admin-Seite hält dann das Display an
+    running: Object.values(state.rooms).filter((r) => r.status === 'running').length,
   };
 });
 

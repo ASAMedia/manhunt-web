@@ -1,6 +1,6 @@
 import {
   $, api, el, fmtCountdown, fmtAge, fmtTime, ROLE_LABEL, STATUS_LABEL, getConfig, createMap, labeledMarker, meetingMarker,
-  cssVar, holdButton, isHolding, playSound, audioReady, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
+  cssVar, holdButton, isHolding, playSound, audioReady, unlockAudio, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
   drawZone, zoneBounds, errorContext,
 } from './common.js';
 
@@ -30,11 +30,21 @@ let settingsDirty = false;
 let fitted = false;
 let pendingFocus = null;  // nach Raumwechsel auf diesen Punkt zoomen (Notfall „Auf Karte“)
 
-let alerts = { emergencies: [], warnings: [] }; // offene Notfälle + Warnungen aller Räume
+let alerts = { emergencies: [], warnings: [], running: 0 }; // offene Notfälle + Warnungen aller Räume
 let alertTimer = null;
 let lastAlarmAt = 0;
 let lastWarnAt = 0;
 const knownAlerts = new Set();
+// Verbindung zur Alarmliste: zwei Fehlschläge in Folge oder eine hängende Abfrage = Alarme kommen nicht an
+let alertFails = 0;
+let alertInFlightSince = 0;
+let lostSince = 0;
+let wakeLock = null;
+let wakeLockPending = false;
+
+// Einsatz-Ansicht: im laufenden Spiel auf dem Handy nur Karte, Warnungen, Zähler und die wichtigsten Knöpfe
+const narrow = matchMedia('(max-width: 760px)');
+let viewPref = null;      // null = automatisch (Handy), sonst 'mission' | 'full'
 
 const now = () => Date.now() + clockOffset;
 const baseUrl = () => cfg.publicUrl || location.origin;
@@ -75,6 +85,10 @@ function showLogin() {
   loggedIn = false;
   clearTimeout(pollTimer);
   clearTimeout(alertTimer);
+  alertFails = 0;
+  lostSince = 0;
+  updateWakeLock();
+  renderGuard();
   show('loginView');
   $('#password').focus();
 }
@@ -112,7 +126,12 @@ function route() {
 
 function handleError(e) {
   if (e.status === 401) return showLogin();
-  toast(e.message, true);
+  toast(e.status ? e.message : 'Keine Verbindung zum Server – bitte erneut versuchen.', true);
+}
+
+// Regelmäßige Abfragen: Funklöcher nicht jedes Mal als Meldung zeigen – dafür gibt es das Verbindungs-Banner
+function handlePollError(e) {
+  if (e.status) handleError(e);
 }
 
 function updateTitle() {
@@ -126,17 +145,94 @@ function updateTitle() {
 // Notfälle (alle Räume)
 // ---------------------------------------------------------------------------
 
+const withTimeout = (promise, ms) => Promise.race([promise, new Promise((_, reject) => {
+  setTimeout(() => reject(new Error('Zeitüberschreitung')), ms);
+})]);
+
+let alertPolling = false;
 async function pollAlerts() {
   clearTimeout(alertTimer);
-  if (!loggedIn) return;
+  if (!loggedIn || alertPolling) return;
+  alertPolling = true;
+  alertInFlightSince = Date.now();
   try {
-    alerts = await api('GET', '/api/admin/alerts');
-    renderAlertBar();
+    alerts = await withTimeout(api('GET', '/api/admin/alerts'), 20000);
+    alertFails = 0;
   } catch (e) {
-    if (e.status === 401) return showLogin();
+    if (e.status === 401) { alertPolling = false; alertInFlightSince = 0; return showLogin(); }
+    alertFails++;
   }
-  alertTimer = setTimeout(pollAlerts, 4000);
+  alertPolling = false;
+  alertInFlightSince = 0;
+  renderAlertBar();
+  updateWakeLock();
+  if (loggedIn) alertTimer = setTimeout(pollAlerts, alertFails ? 2000 : 4000);
 }
+
+const connectionLost = () => loggedIn && (alertFails >= 2 || (alertInFlightSince && Date.now() - alertInFlightSince > 12000));
+
+// Display anlassen, solange irgendwo ein Spiel läuft – sonst verpasst das Handy in der Tasche den Alarm
+async function updateWakeLock() {
+  const want = loggedIn && alerts.running > 0 && document.visibilityState === 'visible';
+  if (want && !wakeLock && !wakeLockPending && 'wakeLock' in navigator) {
+    wakeLockPending = true;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      wakeLock = lock;
+      lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; renderGuard(); });
+    } catch { wakeLock = null; }
+    wakeLockPending = false;
+  } else if (!want && wakeLock) {
+    const lock = wakeLock;
+    wakeLock = null;
+    lock.release().catch(() => {});
+  }
+  renderGuard();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !loggedIn) return;
+  pollAlerts(); // nach dem Aufwecken sofort nachsehen, nicht erst nach dem nächsten Takt
+  updateWakeLock();
+});
+// manche Browser geben die Display-Sperre nur nach einer Berührung frei
+document.addEventListener('pointerdown', () => { if (loggedIn && alerts.running > 0 && !wakeLock) updateWakeLock(); }, { capture: true });
+
+// Absicherungs-Zeile: nur während ein Spiel läuft
+function renderGuard() {
+  const line = $('#guardLine');
+  const lost = connectionLost();
+  if (lost && !lostSince) {
+    lostSince = Date.now();
+    playSound(SOUNDS.warn);
+    renderAlertBar();
+  } else if (!lost && lostSince) {
+    lostSince = 0;
+    renderAlertBar();
+  }
+  const visible = loggedIn && alerts.running > 0;
+  line.classList.toggle('hidden', !visible);
+  if (!visible) return;
+  const sound = audioReady();
+  const display = wakeLock ? ['ok', 'bleibt an']
+    : 'wakeLock' in navigator ? ['warn', 'kann ausgehen – einmal auf die Seite tippen']
+      : ['warn', 'automatische Sperre des Handys ausschalten'];
+  const item = (state, label, value) => el('span', { class: `guard-item ${state}` },
+    el('span', { 'aria-hidden': 'true', text: state === 'ok' ? '✓' : '!' }), ` ${label}: `, el('strong', { text: value }));
+  swapIfChanged(line,
+    item(sound ? 'ok' : 'warn', '🔊 Alarmton', sound ? 'bereit' : 'blockiert – einmal auf die Seite tippen'),
+    item(display[0], '🔆 Display', display[1]),
+    el('button', { class: 'btn sm', type: 'button', onclick: testAlarm, text: 'Alarmton testen' }));
+}
+setInterval(renderGuard, 1000);
+
+async function testAlarm() {
+  await withTimeout(unlockAudio(), 800).catch(() => {});
+  if (playSound(SOUNDS.alarm)) toast('So klingt ein Notfall. Zu leise? Lautstärke hoch, Stummschaltung aus.');
+  else toast('Ton ist blockiert – Lautstärke und Stummschaltung prüfen, dann erneut tippen.', true);
+  renderGuard();
+}
+$('#alarmTest').addEventListener('click', testAlarm);
 
 const WARN_TEXT = { signal: 'Kein Signal', zone: 'Außerhalb des Spielfelds', join: 'Neu beigetreten', battery: 'Akku fast leer' };
 
@@ -145,7 +241,8 @@ function renderAlertBar() {
   const { emergencies } = alerts;
   const warnings = alerts.warnings.filter((w) => !w.acked); // quittierte Warnungen nur noch in der Geräte-Liste
   const unacked = emergencies.filter((a) => !a.ackAt);
-  bar.classList.toggle('hidden', !emergencies.length && !warnings.length);
+  const lost = loggedIn && lostSince > 0;
+  bar.classList.toggle('hidden', !emergencies.length && !warnings.length && !lost);
 
   // Alarmton bei neuem Notfall sofort, danach alle 10 s, bis er als „gesehen“ markiert ist.
   // Warnungen: leiserer Ton bei neuer Warnung, danach alle 30 s, bis sie quittiert sind.
@@ -171,7 +268,14 @@ function renderAlertBar() {
   }
   const warnItems = [...groups.values()].map((list) => (list.length === 1 ? warnItem(list[0]) : warnGroupItem(list)));
 
-  swapIfChanged(bar, emergencies.map((a) => el('div', { class: `alert-item sos ${a.ackAt ? 'acked' : 'unacked'}` },
+  swapIfChanged(bar, lost ? el('div', { class: 'alert-item sos unacked offline' },
+    el('div', {},
+      el('strong', { text: '📶 Keine Verbindung zum Server – Alarme kommen nicht an!' }),
+      el('div', {
+        class: 'small',
+        text: `Seit ${fmtTime(lostSince)} Uhr. WLAN/Mobilfunk prüfen – die Seite versucht es weiter. Bis dahin Notfall-Telefon im Blick behalten; Angezeigtes kann veraltet sein.`,
+      }))) : null,
+  emergencies.map((a) => el('div', { class: `alert-item sos ${a.ackAt ? 'acked' : 'unacked'}` },
     el('div', {},
       el('strong', { text: `🚨 NOTFALL: ${a.name}` }),
       el('span', { text: ` · ${a.roomName} · seit ${fmtTime(a.at)} Uhr${a.ackAt ? ` · gesehen ${fmtTime(a.ackAt)}` : ''}` }),
@@ -188,7 +292,8 @@ function renderAlertBar() {
         onclick: () => { if (confirm(`Notfall von ${a.name} als erledigt markieren?`)) emergencyAction(a, { resolve: true }); },
       })))),
   warnItems,
-  (unacked.length || warnings.length) && !audioReady()
+  // im laufenden Spiel steht das schon in der Absicherungs-Zeile darunter
+  (unacked.length || warnings.length) && !audioReady() && !alerts.running
     ? el('div', { class: 'alert-item info small', text: 'Alarmton ist blockiert – einmal irgendwo auf die Seite klicken.' })
     : null);
 }
@@ -199,7 +304,7 @@ function warnItem(w) {
       el('strong', { text: `⚠ ${WARN_TEXT[w.type]}: ${w.name}` }),
       el('span', { text: ` · ${w.roomName}` }),
       el('div', {
-        class: 'small',
+        class: 'small warn-detail', // in der Einsatz-Ansicht ausgeblendet
         text: w.type === 'signal'
           ? (w.key ? `Letztes Signal ${fmtTime(w.since)} Uhr – Display aus, Akku leer oder Funkloch?` : 'Hat seit Spielstart noch nie gesendet')
           : w.type === 'join' ? `Um ${fmtTime(w.since)} Uhr nach dem Verteilen der Rollen beigetreten und automatisch Jäger – kennst du das Gerät? Sonst entfernen.`
@@ -258,6 +363,7 @@ function focusAlert(a) {
 
 async function openList() {
   roomId = null;
+  document.body.classList.remove('mission');
   show('listView');
   updateTitle();
   loadSetupCheck();
@@ -287,9 +393,10 @@ async function loadList() {
     r.autoDeleteAt ? el('div', { class: 'small muted', text: `Wird am ${fmtDate(r.autoDeleteAt)} automatisch gelöscht` }) : null,
     )));
   } catch (e) {
-    return handleError(e);
+    if (e.status === 401) return showLogin();
+    handlePollError(e); // nach einem Funkloch weiter abfragen
   }
-  if (!roomId) {
+  if (!roomId && loggedIn) {
     clearTimeout(pollTimer);
     pollTimer = setTimeout(loadList, 5000);
   }
@@ -404,6 +511,7 @@ async function openRoom(id) {
   roomId = id;
   if (switched) {
     R = null;
+    viewPref = null;
     fitted = false;
     settingsDirty = false;
     pendingZone = undefined;
@@ -435,19 +543,40 @@ async function loadRoom() {
     if (v === roomVersion) setRoom(room);
   } catch (e) {
     if (e.status === 404) { toast('Raum nicht gefunden', true); location.hash = ''; return; }
-    handleError(e);
+    if (e.status === 401) return showLogin();
+    handlePollError(e);
   }
-  if (roomId === id) {
+  if (roomId === id && loggedIn) {
     clearTimeout(pollTimer); // nie zwei Abfrage-Schleifen gleichzeitig
     pollTimer = setTimeout(loadRoom, 3000);
   }
 }
 
 function setRoom(room) {
+  if (R && R.status !== 'running' && room.status === 'running') viewPref = null; // neue Runde: wieder automatisch
   R = room;
   clockOffset = room.serverTime - Date.now();
   renderRoom();
 }
+
+const missionActive = () => !!R && R.status === 'running' && (viewPref === 'mission' || (viewPref === null && narrow.matches));
+
+function renderView() {
+  const mission = missionActive();
+  document.body.classList.toggle('mission', mission);
+  const btn = $('#viewToggle');
+  btn.classList.toggle('hidden', R?.status !== 'running');
+  btn.textContent = mission ? 'Alles anzeigen' : 'Einsatz-Ansicht';
+  btn.title = mission ? 'Einstellungen, Einladen, Verlauf und Auswertung wieder einblenden'
+    : 'Nur Karte, Warnungen, Zähler und die wichtigsten Knöpfe – für das Handy unterwegs';
+}
+
+$('#viewToggle').addEventListener('click', () => {
+  viewPref = missionActive() ? 'full' : 'mission';
+  renderRoom();
+  window.scrollTo({ top: 0 });
+});
+narrow.addEventListener('change', () => { if (R && !$('#roomView').classList.contains('hidden')) renderRoom(); });
 
 // Aktion ausführen und Raum mit der Antwort neu zeichnen
 async function act(method, path, body) {
@@ -464,6 +593,7 @@ async function act(method, path, body) {
 }
 
 function renderRoom() {
+  renderView();
   $('#rName').textContent = R.name;
   updateTitle();
   const st = $('#rStatus');
@@ -484,12 +614,13 @@ function renderTimers() {
   if (!R || $('#roomView').classList.contains('hidden')) return;
   const t = now();
   const items = [];
-  const timer = (label, value) => el('div', { class: 'timer' }, el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }));
+  const timer = (label, value, cls = '') => el('div', { class: `timer ${cls}` }, el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }));
   if (R.status === 'running') {
     if (t < R.huntStartsAt) items.push(timer('Vorsprung', fmtCountdown(R.huntStartsAt - t)));
     else items.push(timer('Nächster Ping', fmtCountdown(R.nextPingAt - t)));
-    items.push(timer('Spielende', fmtCountdown(R.endsAt - t)));
-    items.push(timer('Gejagte frei', String(R.runners)));
+    items.push(timer('Spielende', fmtCountdown(R.endsAt - t), R.endsAt - t <= 5 * 60e3 ? 'urgent' : ''));
+    const total = R.players.filter((p) => p.role === 'runner' || p.wasRunner).length;
+    items.push(timer('Gejagte frei', `${R.runners} von ${total}`));
     items.push(timer('Extra-Pings übrig', String(R.extraPingsLeft)));
   }
   $('#rTimers').replaceChildren(...items);
@@ -499,7 +630,8 @@ setInterval(renderTimers, 1000);
 function renderControls() {
   const b = (text, cls, onclick) => el('button', { class: `btn ${cls}`, type: 'button', onclick, text });
   const items = [];
-  if (!isAdmin()) {
+  const mission = missionActive();
+  if (!isAdmin() && !mission) {
     items.push(el('span', { class: 'small muted', text: 'Als Aufsicht siehst du alles, bearbeitest Notfälle und sendest Nachrichten. Starten, Einstellen und Löschen macht die Spielleitung.' }));
   } else if (R.status === 'lobby') {
     items.push(b('Spiel starten', 'primary', () => {
@@ -511,6 +643,10 @@ function renderControls() {
     items.push(b('Sofort-Ping', 'primary', () => {
       if (confirm('Jetzt einen Ping an alle Jäger senden? (zählt nicht als Extra-Ping)')) act('POST', '/ping');
     }));
+  }
+  // Einsatz-Ansicht: „Alle zum Treffpunkt“ direkt erreichbar (auch für die Aufsicht)
+  if (mission && R.settings.meetingPoint) items.push(b('Alle zum Treffpunkt', '', callMeeting));
+  if (isAdmin() && R.status === 'running') {
     items.push(b('Spiel beenden', 'danger', () => {
       if (confirm('Spiel wirklich beenden?')) act('POST', '/end');
     }));
@@ -518,9 +654,9 @@ function renderControls() {
   if (isAdmin() && R.status === 'ended') {
     items.push(b('Neue Runde (zurück zur Lobby)', 'primary', () => act('POST', '/lobby')));
   }
-  if (isAdmin()) items.push(b('Raum kopieren', '', copyRoom));
+  if (isAdmin() && !mission) items.push(b('Raum kopieren', '', copyRoom));
   // Löschen nur durch Gedrückthalten, damit es nicht aus Versehen passiert
-  if (isAdmin()) items.push(holdButton({
+  if (isAdmin() && !mission) items.push(holdButton({
     text: 'Raum löschen (gedrückt halten)', cls: 'danger', title: 'Raum mit allen Daten löschen – 2 Sekunden gedrückt halten',
     onConfirm: async () => {
       try {
@@ -629,7 +765,11 @@ $('#removeAllBox').prepend(holdButton({
 function renderPlayers() {
   // nicht im laufenden Spiel und nur, wenn es etwas zu entfernen gibt
   $('#removeAllBox').classList.toggle('hidden', !isAdmin() || R.status === 'running' || !R.players.length);
-  const players = [...R.players].sort((a, b) => (b.emergency - a.emergency)
+  // Einsatz-Ansicht: Geräte mit Problemen (Warnung, außerhalb, kein Signal) gleich nach den Notfällen
+  const t0 = now();
+  const trouble = (p) => (missionActive()
+    ? Number(p.warnings?.some((w) => !w.acked || w.type !== 'join') || p.outside || !p.lastSeen || t0 - p.lastSeen > 60000) : 0);
+  const players = [...R.players].sort((a, b) => (b.emergency - a.emergency) || (trouble(b) - trouble(a))
     || (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || a.name.localeCompare(b.name, 'de'));
   $('#pTitle').textContent = `Geräte (${players.length})`;
   $('#drawN').max = Math.max(1, players.length - 1);
@@ -1036,12 +1176,13 @@ $('#msgForm').addEventListener('submit', async (e) => {
   if (await act('POST', '/message', { text })) { $('#msgText').value = ''; toast('Nachricht gesendet'); }
 });
 $('#msgClear').addEventListener('click', () => act('POST', '/message', { text: '' }));
-$('#msgMeeting').addEventListener('click', async () => {
+async function callMeeting() {
   const mp = R.settings.meetingPoint;
   if (!mp || !confirm(`Alle Handys zum Treffpunkt „${mp.label}“ rufen?`)) return;
   const text = `Bitte alle sofort zum Treffpunkt: ${mp.label}! Die Route findet ihr unten unter „Treffpunkt“.`;
   if (await act('POST', '/message', { text })) toast('Alle wurden zum Treffpunkt gerufen');
-});
+}
+$('#msgMeeting').addEventListener('click', callMeeting);
 
 function renderEvents() {
   swapIfChanged($('#events'), [...R.events].reverse().map((ev) =>

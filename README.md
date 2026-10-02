@@ -16,15 +16,17 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 |---|---|
 | Räume & Beitritt | beliebig viele Räume; Beitritt per QR-Code oder 6-stelligem Code; Beitritt schließbar |
 | Rollen | pro Gerät setzen oder „N Gejagte auslosen“; wer später beitritt, wird automatisch Jäger |
-| Pings | frei wählbares Intervall (1–180 min), erster Ping am Ende des Vorsprungs; **Vorwarnung** kurz vorher. Beim Ping sehen die Jäger die Gejagten – und die Gejagten die Jäger (jeweils als Momentaufnahme) |
+| Pings | frei wählbares Intervall (1–180 min), erster Ping am Ende des Vorsprungs; **Vorwarnung** kurz vorher. Beim Ping sehen die Jäger die Gejagten – und die Gejagten die Jäger (jeweils als Momentaufnahme, beschriftet mit dem **Alter**, z. B. „vor 3 min“) |
 | Extra-Pings | gemeinsamer Vorrat für alle Jäger; die Spielleitung kann jederzeit einen Sofort-Ping auslösen |
 | **Blocks** | jeder Gejagte darf (einstellbar, Standard 1×) den nächsten Ping aussetzen und bleibt dabei unsichtbar |
 | Fangen | Gejagte melden sich selbst als gefangen und **werden dann Jäger**; die Spielleitung kann korrigieren |
 | Spielfeld | **Kreis oder frei gezeichnete Fläche** (z. B. entlang von Spree und S-Bahn-Ring); optional **schrumpfend** bis Spielende – bei Flächen nur, wenn sie dabei nicht aus sich herauswandern (keine U- oder L-Formen) |
 | Verkehrsmittel (Option) | Mister-X-Stil: Gejagte melden U-Bahn, S-Bahn, Bus, Tram oder zu Fuß – Jäger sehen nur die Art |
-| Treffpunkt | auf der Karte mit Fußweg-Route; nach Spielende „Alle zum Treffpunkt“ |
+| **Endspurt** | 5 Minuten vor Schluss Banner und Ton auf allen Handys; bei Spielende automatisch „Alle zum Treffpunkt“ mit Fußweg-Route |
+| Treffpunkt | auf der Karte mit Fußweg-Route |
+| **Kurzanleitung** | beim ersten Öffnen drei Schritte passend zur Rolle (Lobby, Gejagt, Jäger), einmal pro Handy; danach oben im Regel-Fenster |
 | Regeln | „📋 Regeln“ auf jedem Handy – Standardregeln aus den Einstellungen oder eigener Text |
-| Töne | bei Ping, Vorwarnung, Start, Gefangen, Nachricht; pro Handy abschaltbar |
+| Töne | bei Ping, Vorwarnung, Start, Gefangen, Nachricht, Endspurt; pro Handy abschaltbar |
 | Sprachen | Spielerseiten auf **Deutsch und Englisch** (automatisch nach Handy-Sprache, umschaltbar) |
 | **Sonnenmodus** | „☀️ Sonnenmodus“ auf dem Handy: maximaler Kontrast, größere Schrift und Kartenbeschriftung für draußen |
 
@@ -35,6 +37,8 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | **Notfall (SOS)** | SOS-Knopf 1,5 s gedrückt halten → rote Alarmleiste mit Ton auf jeder Admin-Seite, Standort, Route; „Gesehen“ sieht der Schüler; optional Anruf-Knopf mit Notfall-Telefon |
 | **Warnungen** | gelbe Leiste, wenn ein Gerät einige Minuten kein Signal sendet, das Spielfeld verlässt (mit 20 m Toleranz gegen GPS-Zittern), nach dem Verteilen der Rollen neu beitritt oder der **Akku unter 15 %** fällt (Android; iPhones melden den Akkustand nicht); gebündelt, quittierbar |
 | **Handy-Check** | prüft vor dem Start Standort, Display-an, Ton, Akku, Vibration mit Tipps für iPhone/Android; Ergebnis in der Geräte-Liste („Check ✓/⚠“) |
+| **Alarm-Absicherung** | solange ein Spiel läuft, hält die Admin-Seite das Display an; rotes Banner „Keine Verbindung – Alarme kommen nicht an“, wenn das Handy der Spielleitung kein Netz hat; Knopf „🔊 Alarmton testen“ |
+| **Einsatz-Ansicht** | im laufenden Spiel auf dem Handy automatisch: nur Warnungen, Zähler, Karte, Sofort-Ping/Treffpunkt/Beenden, Geräte (Probleme zuerst) und Nachricht; „Alles anzeigen“ schaltet um |
 | Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit, Akku |
 | Nachricht an alle | z. B. Spielabbruch; Schnellknopf „Alle zum Treffpunkt rufen“ |
 | Wiederbeitritt | QR-Code pro Gerät, falls ein Handy ausfällt |
@@ -142,7 +146,7 @@ Caddy auf dem Host (`reverse_proxy 127.0.0.1:3000`), Traefik und Nginx Proxy Man
 3. **Druckblatt** beamern oder **QR groß anzeigen** – alle treten bei und tippen „Standort freigeben & loslegen“.
 4. **Handy-Check** abwarten, bis möglichst alle „Check ✓“ haben; dabei „Karte speichern“ für Funklöcher.
 5. **Rollen** setzen oder auslosen. Jäger-Teams behalten ein Handy, die anderen melden sich unten mit „Spiel verlassen“ ab.
-6. SOS-Knopf kurz erklären, **Beitritt schließen**, **Spiel starten**.
+6. SOS-Knopf kurz erklären, **Beitritt schließen**, einmal **„🔊 Alarmton testen“** (Lautstärke!), **Spiel starten**. Unterwegs zeigt das Handy der Spielleitung die kompakte **Einsatz-Ansicht**.
 7. Danach: **Auswertung** ansehen, abends das **Ping-Replay** zeigen, „Neue Runde“.
 
 **Tipp:** Erst allein mit dem **Probespiel** ausprobieren, dann einmal mit 3–4 echten Handys – inklusive iPhone. Die Kurzanleitung für Kolleg:innen steht unter `/hilfe`.

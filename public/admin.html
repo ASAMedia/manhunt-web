@@ -28,6 +28,8 @@
   <div id="adminWrap" class="admin-wrap hidden">
     <!-- Offene Notfälle aller Räume – auf jeder Ansicht sichtbar -->
     <div id="alertBar" class="alert-bar hidden" role="alert" aria-live="assertive"></div>
+    <!-- Alarm-Absicherung, solange ein Spiel läuft: Ton bereit? Display bleibt an? -->
+    <div id="guardLine" class="guard-line hidden"></div>
 
     <!-- Raumliste -->
     <section id="listView" class="hidden">
@@ -35,6 +37,7 @@
         <h1 style="margin:0">Räume</h1>
         <div class="row">
           <span class="badge supervisor-only" title="Du bist als Aufsicht angemeldet: ansehen, Notfälle bearbeiten, Nachrichten senden">Aufsicht</span>
+          <button id="alarmTest" class="btn sm" type="button" title="Alarmton abspielen – so klingt ein Notfall. Lautstärke prüfen!">🔊 Alarmton testen</button>
           <a class="btn sm" href="/hilfe" target="_blank" rel="noopener">Hilfe</a>
           <button id="logoutBtn" class="btn sm" type="button">Abmelden</button>
         </div>
@@ -71,8 +74,9 @@
         <div class="row">
           <a href="#" class="btn sm">← Räume</a>
           <h1 id="rName" style="margin:0"></h1>
-          <button id="renameRoom" class="btn sm admin-only" type="button">Umbenennen</button>
+          <button id="renameRoom" class="btn sm admin-only mission-hide" type="button">Umbenennen</button>
           <span id="rStatus" class="badge"></span>
+          <button id="viewToggle" class="btn sm hidden" type="button"></button>
           <span class="badge supervisor-only">Aufsicht</span>
           <a class="btn sm" href="/hilfe" target="_blank" rel="noopener">Hilfe</a>
         </div>
@@ -84,10 +88,10 @@
           <div class="card stack first">
             <div id="controls" class="row"></div>
             <div id="result"></div>
-            <p id="autoDel" class="small muted"></p>
+            <p id="autoDel" class="small muted mission-hide"></p>
           </div>
 
-          <div class="card stack">
+          <div class="card stack mission-hide">
             <h2>Einladen</h2>
             <div class="invite">
               <img id="qr" alt="QR-Code zum Beitreten" title="Groß anzeigen">
@@ -121,11 +125,11 @@
                 <tbody id="pBody"></tbody>
               </table>
             </div>
-            <p class="small muted">Beim Auslosen werden die übrigen Geräte Jäger. Wer nach dem Verteilen der Rollen oder während des Spiels beitritt, wird automatisch Jäger. Jäger-Teams brauchen nur ein Handy – überzählige Geräte melden sich in der Lobby selbst ab oder du entfernst sie hier.</p>
-            <div id="removeAllBox" class="remove-all admin-only hidden">
+            <p class="small muted mission-hide">Beim Auslosen werden die übrigen Geräte Jäger. Wer nach dem Verteilen der Rollen oder während des Spiels beitritt, wird automatisch Jäger. Jäger-Teams brauchen nur ein Handy – überzählige Geräte melden sich in der Lobby selbst ab oder du entfernst sie hier.</p>
+            <div id="removeAllBox" class="remove-all admin-only mission-hide hidden">
               <span class="small muted">Räumt den Raum, z. B. für die nächste Klasse. Einstellungen, Verlauf und Auswertung bleiben.</span>
             </div>
-            <div class="bot-box admin-only">
+            <div class="bot-box admin-only mission-hide">
               <strong>Probespiel</strong>
               <span class="small muted">Test-Geräte laufen von selbst über die Karte, Jäger steuern auf den letzten Ping zu; Test-Gejagte gelten als gefangen, wenn ein Jäger näher als 20 m kommt.</span>
               <div class="row">
@@ -135,7 +139,7 @@
             </div>
           </div>
 
-          <div class="card stack admin-only">
+          <div class="card stack admin-only mission-hide">
             <h2>Einstellungen</h2>
             <form id="settingsForm" class="stack">
               <div class="settings-grid">
@@ -200,7 +204,7 @@
             <div id="msgCurrent" class="small muted"></div>
           </div>
 
-          <div class="card stack">
+          <div class="card stack mission-hide">
             <h2>Auswertung</h2>
             <div id="rounds"></div>
             <div class="row">
@@ -210,7 +214,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card mission-hide">
             <h2>Verlauf</h2>
             <ul id="events" class="list events"></ul>
           </div>

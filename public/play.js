@@ -45,6 +45,9 @@ let centered = false;
 let autoFit = null;        // zuletzt automatisch gewählter Ausschnitt, bis der Nutzer die Karte bewegt
 let seenPingAt = Number(store.get('mh_seen_ping')) || 0;
 let warnedFor = 0;         // für welchen Ping-Zeitpunkt die Vorwarnung schon kam
+let finalWarnedFor = Number(store.get('mh_final_warned')) || 0; // für welches Spielende die Endspurt-Warnung schon kam
+const FINAL_MS = 5 * 60e3; // Endspurt: 5 Minuten vor Spielende
+const ageLabels = { pings: [], hunters: [] }; // Kartenschilder mit „vor X min“, werden jede Sekunde aktualisiert
 let soundOn = store.get('mh_sound') !== 'off';
 // Sonnenmodus: maximaler Kontrast, größere Schrift und Kartenbeschriftung (pro Gerät gemerkt)
 let sunOn = store.get('mh_sun') === 'on';
@@ -113,7 +116,7 @@ async function init() {
 // Beim Verlassen oder Entfernen: Zugangsschlüssel, Spielstände und Offline-Speicher (Seiten, Kartenbilder) löschen.
 // Einstellungen wie Ton, Sprache und Sonnenmodus bleiben.
 function clearGameData() {
-  for (const k of ['mh_token', 'mh_seen_ping', 'mh_msg_seen', 'mh_map_saved', 'mh_map_count', 'mh_check_sound']) store.del(k);
+  for (const k of ['mh_token', 'mh_seen_ping', 'mh_msg_seen', 'mh_map_saved', 'mh_map_count', 'mh_check_sound', 'mh_final_warned']) store.del(k);
   if ('caches' in window) caches.keys().then((keys) => keys.filter((k) => k.startsWith('mh-')).forEach((k) => caches.delete(k))).catch(() => {});
 }
 
@@ -167,7 +170,8 @@ function onPosition(p) {
   lastPos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: Date.now() };
   geoError = null;
   drawOwn();
-  if (firstFix && autoFit === fitToPing) fitToPing(); // eigene Position mit in den Ping-Ausschnitt nehmen
+  // eigene Position mit in den Ping- bzw. Treffpunkt-Ausschnitt nehmen
+  if (firstFix && (autoFit === fitToPing || autoFit === fitToMeeting)) autoFit();
   if (firstFix) render();
   maybeSend();
 }
@@ -294,7 +298,14 @@ function detectChanges() {
       setTimeout(() => maybeSend(true)); // Spielleitung sieht sofort alle Positionen
     }
     if (room.status === 'lobby') showBanner('status', t('banner.lobby'));
-    if (room.status === 'ended') sound('start');
+    if (room.status === 'ended') {
+      // Spielende: alle zum Treffpunkt – Banner bleibt stehen, Karte zeigt Treffpunkt und eigene Position
+      const mp = room.meetingPoint;
+      showBanner('status', mp ? t('banner.endedMeeting', { label: mp.label }) : t('banner.ended'), { cls: 'message', sticky: true });
+      vibrate([400, 150, 400]);
+      sound('start');
+      if (mp) setTimeout(fitToMeeting);
+    }
   }
   if (prev.role === 'runner' && me.role === 'hunter' && me.caughtAt) {
     showBanner('role', t('banner.caught'), { cls: 'hunter', sticky: true });
@@ -364,10 +375,11 @@ function render() {
   if (check.overlay) swapIfChanged($('#checkHost'), el('div', {}, checkCard()));
   drawMap();
   sendCheck();
+  maybeShowGuide();
 }
 
-function timer(label, value) {
-  return el('div', { class: 'timer' }, el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }));
+function timer(label, value, cls = '') {
+  return el('div', { class: `timer ${cls}` }, el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }));
 }
 
 function resultText(room) {
@@ -391,12 +403,45 @@ function renderTimers() {
   } else if (room.status === 'running') {
     if (now_ < room.huntStartsAt) items.push(timer(t('timer.headStart'), fmtCountdown(room.huntStartsAt - now_)));
     else items.push(timer(t('timer.nextPing'), fmtCountdown(room.nextPingAt - now_)));
-    items.push(timer(t('timer.end'), fmtCountdown(room.endsAt - now_)));
+    items.push(timer(t('timer.end'), fmtCountdown(room.endsAt - now_), room.endsAt - now_ <= FINAL_MS ? 'urgent' : ''));
     pingWarning(room, now_);
+    finalWarning(room, now_);
   } else {
     items.push(el('div', { class: 'alert result', text: resultText(room) }));
   }
   $('#timers').replaceChildren(...items);
+  updateAgeLabels();
+}
+
+// Endspurt: einmal pro Spiel 5 Minuten vor Schluss – nicht bei sehr kurzen Spielen und nicht in den letzten Sekunden
+function finalWarning(room, now_) {
+  const left = room.endsAt - now_;
+  if (!room.endsAt || finalWarnedFor === room.endsAt || left > FINAL_MS || left <= 0) return;
+  finalWarnedFor = room.endsAt;
+  store.set('mh_final_warned', String(room.endsAt));
+  if (room.endsAt - room.startedAt <= 2 * FINAL_MS || left < 30000) return;
+  const min = Math.max(1, Math.round(left / 60000));
+  const role = S.me.role;
+  showBanner('final', t(role === 'runner' ? 'final.runner' : role === 'hunter' ? 'final.hunter' : 'final.other', { min }),
+    { cls: role === 'hunter' ? 'hunter' : 'message' });
+  vibrate([300, 100, 300, 100, 300]);
+  sound('final');
+}
+
+// „vor 3 min“ statt Uhrzeit: zeigt auf einen Blick, wie alt ein Ping-Standort ist
+function fmtAgo(ms) {
+  const m = Math.floor(Math.max(0, ms) / 60000);
+  if (m < 1) return t('age.now');
+  if (m < 60) return t('age.min', { n: m });
+  return t('age.hm', { h: Math.floor(m / 60), m: m % 60 });
+}
+const pingLabel = (name, at) => `${name} · ${fmtAgo(now() - at)}`;
+
+function updateAgeLabels() {
+  for (const l of [...ageLabels.pings, ...ageLabels.hunters]) {
+    const text = pingLabel(l.name, l.at);
+    if (text !== l.text) { l.text = text; l.m.setTooltipContent(text); }
+  }
 }
 
 // Vorwarnung kurz vor dem nächsten regulären Ping (auch vor dem ersten Ping am Ende des Vorsprungs)
@@ -581,7 +626,7 @@ function roleHint(room, me, now_) {
     if (me.role === 'runner') return beforeHunt ? t('hint.runnerHeadStart') : t('hint.runner', { min: room.pingIntervalMin });
     if (me.role === 'hunter') {
       if (beforeHunt) return t('hint.hunterHeadStart');
-      return S.lastPingAt ? t('hint.hunterLastPing', { time: fmtTime(S.lastPingAt) }) : t('hint.hunterFirstPing');
+      return S.lastPingAt ? t('hint.hunterLastPing', { time: fmtTime(S.lastPingAt), age: fmtAgo(now_ - S.lastPingAt) }) : t('hint.hunterFirstPing');
     }
   }
   return '';
@@ -851,10 +896,51 @@ function reportTransport(mode) {
 function showRules() {
   const ov = $('#infoOverlay');
   const close = () => ov.classList.add('hidden');
+  const key = guideKey();
   ov.replaceChildren(el('div', { class: 'card stack' },
+    key ? guideSteps(key) : null,
     el('h2', { text: t('rules.title') }),
     el('div', { class: 'rules-text', text: rulesText(S.room, lang) }),
     el('button', { class: 'btn primary big', type: 'button', onclick: close, text: t('rules.ok') })));
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.classList.remove('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Kurzanleitung: drei Schritte je Rolle, beim ersten Öffnen als Overlay (pro Gerät und Rolle gemerkt),
+// danach jederzeit oben im Regel-Fenster
+// ---------------------------------------------------------------------------
+
+function guideKey() {
+  const { room, me } = S;
+  if (room.status === 'ended') return null;
+  if (me.role === 'runner' || me.role === 'hunter') return me.role;
+  return room.status === 'lobby' ? 'lobby' : null;
+}
+
+const guideSeen = () => new Set((store.get('mh_guide_seen') || '').split(',').filter(Boolean));
+
+function guideSteps(key) {
+  // Spielfeld und Vorwarnung nur erwähnen, wenn es sie in diesem Raum gibt
+  const vars = { zone: S.room.zone ? t('guide.zone') : '', warn: S.room.pingWarningSec ? t('guide.warn') : '' };
+  return el('div', { class: 'guide stack' },
+    el('h2', { text: t(`guide.${key}.title`) }),
+    el('ol', { class: 'guide-steps' }, [1, 2, 3].map((i) => el('li', { text: t(`guide.${key}.${i}`, vars) }))),
+    el('p', { class: 'small', text: t('guide.sos') }));
+}
+
+function maybeShowGuide() {
+  const key = tracking && !stopped ? guideKey() : null;
+  const ov = $('#infoOverlay');
+  if (!key || guideSeen().has(key) || !ov.classList.contains('hidden') || isHolding()) return;
+  const close = () => {
+    store.set('mh_guide_seen', [...guideSeen(), key].join(','));
+    ov.classList.add('hidden');
+  };
+  ov.replaceChildren(el('div', { class: 'card stack guide-card' },
+    guideSteps(key),
+    el('button', { class: 'btn primary big', type: 'button', onclick: close, text: t('guide.ok') }),
+    el('button', { class: 'btn sm linkish', type: 'button', onclick: () => { close(); showRules(); }, text: t('guide.allRules') })));
   ov.onclick = (e) => { if (e.target === ov) close(); };
   ov.classList.remove('hidden');
 }
@@ -919,6 +1005,7 @@ function drawMap() {
   if (pKey !== pingsKey) {
     pingsKey = pKey;
     layers.pings.clearLayers();
+    ageLabels.pings = [];
     // Spur pro Gejagtem über die letzten Pings (blockierte oder fehlende Positionen haben keine Koordinaten)
     const trails = {};
     pings.forEach((ping, i) => {
@@ -926,12 +1013,14 @@ function drawMap() {
       for (const pos of ping.positions) {
         if (pos.lat == null) continue;
         (trails[pos.playerId] ??= []).push([pos.lat, pos.lng]);
-        labeledMarker([pos.lat, pos.lng], {
+        const label = latest ? pingLabel(pos.name, ping.at) : null;
+        const m = labeledMarker([pos.lat, pos.lng], {
           color: runnerColor,
           radius: (latest ? 9 : 5) * scale,
           fill: latest ? 0.9 : 0.35,
-          label: latest ? `${pos.name} · ${fmtTime(ping.at)}` : null,
+          label,
         }).addTo(layers.pings);
+        if (latest) ageLabels.pings.push({ m, name: pos.name, at: ping.at, text: label });
       }
     });
     for (const pts of Object.values(trails)) {
@@ -940,11 +1029,14 @@ function drawMap() {
   }
 
   layers.hunters.clearLayers();
-  // Gejagte: Jäger-Positionen vom letzten Ping (gestrichelt, mit Uhrzeit – keine Live-Positionen)
+  ageLabels.hunters = [];
+  // Gejagte: Jäger-Positionen vom letzten Ping (gestrichelt, mit Alter – keine Live-Positionen)
   const snap = room.status === 'running' ? S.huntersAtPing : null;
   for (const h of snap?.hunters || []) {
-    labeledMarker([h.lat, h.lng], { color: hunterColor, radius: 8 * scale, fill: 0.75, dashed: true, label: `${h.name} · ${fmtTime(snap.at)}` })
+    const label = pingLabel(h.name, snap.at);
+    const m = labeledMarker([h.lat, h.lng], { color: hunterColor, radius: 8 * scale, fill: 0.75, dashed: true, label })
       .addTo(layers.hunters);
+    ageLabels.hunters.push({ m, name: h.name, at: snap.at, text: label });
   }
   for (const h of room.status === 'running' ? S.hunters || [] : []) {
     const stale = now() - h.t > 120000;
@@ -958,6 +1050,7 @@ function drawMap() {
 // Erster Kartenausschnitt: Jäger sehen den letzten Ping, sonst das Spielfeld, sonst sich selbst
 function initialView() {
   if (centered || !map || !S) return;
+  if (S.room.status === 'ended' && S.room.meetingPoint) return fitToMeeting();
   if (S.me.role === 'hunter' && S.pings?.some((p) => p.positions.some((x) => x.lat != null))) return fitToPing();
   if (S.me.role === 'runner' && S.huntersAtPing?.hunters.length) return fitToPing();
   let fit = null;
@@ -1012,5 +1105,17 @@ function fitToPing() {
   map.invalidateSize({ pan: false });
   map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 16 });
   autoFit = fitToPing;
+  centered = true;
+}
+
+// Nach Spielende: Treffpunkt und eigene Position zusammen zeigen
+function fitToMeeting() {
+  const mp = S?.room.meetingPoint;
+  if (!map || !mp) return;
+  const pts = [[mp.lat, mp.lng]];
+  if (lastPos) pts.push([lastPos.lat, lastPos.lng]);
+  map.invalidateSize({ pan: false });
+  map.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 17 });
+  autoFit = fitToMeeting;
   centered = true;
 }
