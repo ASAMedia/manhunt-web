@@ -314,8 +314,9 @@ function detectChanges() {
   if (prev.status && prev.status !== room.status) {
     if (room.status === 'running') {
       showBanner('status', t('banner.started'));
-      vibrate([300, 100, 300]);
-      sound('start');
+      // Live miterlebter Start: 3-2-1-Countdown (Ton und Vibration bei „Los!“), sonst nur Ton
+      if (now() - room.startedAt < 15000) startCountdown();
+      else { vibrate([300, 100, 300]); sound('start'); }
       setTimeout(() => maybeSend(true)); // Spielleitung sieht sofort alle Positionen
     }
     if (room.status === 'lobby') showBanner('status', t('banner.lobby'));
@@ -326,12 +327,18 @@ function detectChanges() {
       vibrate([400, 150, 400]);
       sound('start');
       if (mp) setTimeout(fitToMeeting);
+      // Ergebnis-Bildschirm, wenn das Ende gerade passiert ist (nicht beim späteren Öffnen der Seite)
+      if (now() - (room.endedAt || 0) < 60000) setTimeout(showResultOverlay, 300);
     }
   }
   if (prev.role === 'runner' && me.role === 'hunter' && me.caughtAt) {
     showBanner('role', t('banner.caught'), { cls: 'hunter', sticky: true });
     vibrate([500]);
     sound('caught');
+  } else if (prev.status && room.status === 'lobby' && prev.role !== me.role && me.role) {
+    vibrate([200, 80, 200]);
+    sound('message');
+    if (guideSeen().has(me.role)) setTimeout(() => showRoleReveal(me.role, false));
   } else if (prev.role && prev.role !== me.role && me.role) {
     showBanner('role', t('banner.role', { role: roleLabel(me.role) }), { sticky: true });
   }
@@ -434,16 +441,135 @@ function renderTimers() {
   if (room.status === 'lobby') {
     items.push(timer(t('timer.status'), t('timer.waiting')));
   } else if (room.status === 'running') {
-    if (now_ < room.huntStartsAt) items.push(timer(t('timer.headStart'), fmtCountdown(room.huntStartsAt - now_)));
-    else items.push(timer(t('timer.nextPing'), fmtCountdown(room.nextPingAt - now_)));
+    items.push(pingRing(room, now_));
     items.push(timer(t('timer.end'), fmtCountdown(room.endsAt - now_), room.endsAt - now_ <= FINAL_MS ? 'urgent' : ''));
     pingWarning(room, now_);
     finalWarning(room, now_);
-  } else {
-    items.push(el('div', { class: 'alert result', text: resultText(room) }));
   }
+  // nach Spielende steht das Ergebnis als Karte im Bedienfeld
   $('#timers').replaceChildren(...items);
   updateAgeLabels();
+}
+
+// Nächster Ping als Fortschrittsring: voll direkt nach dem Ping, leer beim nächsten. Kurz vor dem Ping (Vorwarnzeit,
+// mindestens 10 s) wird er gelb. Im Vorsprung zählt er den Vorsprung herunter – groß und mit einem Satz zur Rolle.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function pingRing(room, now_) {
+  const head = now_ < room.huntStartsAt;
+  const target = head ? room.huntStartsAt : room.nextPingAt;
+  const total = (head ? room.headStartMin : room.pingIntervalMin) * 60e3;
+  const left = Math.max(0, target - now_);
+  const frac = total ? Math.min(1, left / total) : 0;
+  const soon = !head && left <= Math.max(10000, (room.pingWarningSec || 0) * 1000);
+  const r = 26, c = 2 * Math.PI * r;
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 64 64');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const [cls, extra] of [['ring-bg', {}], ['ring-fg', { 'stroke-dasharray': c.toFixed(1), 'stroke-dashoffset': (c * (1 - frac)).toFixed(1) }]]) {
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    for (const [k, v] of Object.entries({ class: cls, cx: 32, cy: 32, r, ...extra })) circle.setAttribute(k, v);
+    svg.append(circle);
+  }
+  const role = S.me.role;
+  return el('div', { class: `timer ring-timer${soon ? ' soon' : ''}${head ? ' head' : ''}` }, svg,
+    el('div', {},
+      el('div', { class: 'label', text: head ? t('timer.headStart') : t('timer.nextPing') }),
+      el('div', { class: 'value', text: fmtCountdown(left) }),
+      head && role ? el('div', { class: 'hero-line', text: t(role === 'runner' ? 'hero.runner' : 'hero.hunter') }) : null));
+}
+
+// 3-2-1 beim live miterlebten Start – antippen überspringt
+function startCountdown() {
+  document.getElementById('countdown')?.remove();
+  const role = S.me.role;
+  const mins = S.room.headStartMin;
+  const num = el('div', { class: 'cd-num' });
+  const sub = el('div', {
+    class: 'cd-sub',
+    text: role === 'runner' ? t(mins ? 'countdown.runner' : 'countdown.runnerNow', { min: mins })
+      : role === 'hunter' ? t(mins ? 'countdown.hunter' : 'countdown.hunterNow', { min: mins }) : t('countdown.other'),
+  });
+  const node = el('div', { class: `countdown ${role || ''}`, id: 'countdown', role: 'status' }, num, sub);
+  const steps = ['3', '2', '1', t('countdown.go')];
+  let i = 0;
+  let timerId = null;
+  const finish = () => { clearTimeout(timerId); node.remove(); };
+  node.addEventListener('click', finish);
+  const step = () => {
+    num.textContent = steps[i];
+    num.classList.remove('pop');
+    void num.offsetWidth; // Animation neu starten
+    num.classList.add('pop');
+    if (i < 3) { sound('tick'); vibrate([60]); } else { sound('start'); vibrate([300, 100, 300]); }
+    i++;
+    timerId = setTimeout(i < steps.length ? step : finish, i < steps.length ? 800 : 1200);
+  };
+  document.body.append(node);
+  step();
+}
+
+// Rollen-Karte: Vollbild in der Rollenfarbe, auf Wunsch mit der Kurzanleitung darunter
+function showRoleReveal(role, withGuide) {
+  const ov = $('#infoOverlay');
+  if (!ov.classList.contains('hidden') && !withGuide) return;
+  check.overlay = false;
+  const close = () => {
+    store.set('mh_guide_seen', [...new Set([...guideSeen(), role])].join(','));
+    ov.classList.add('hidden');
+  };
+  ov.replaceChildren(el('div', { class: `card stack reveal-card ${role}` },
+    el('div', { class: 'reveal-head' },
+      el('div', { class: 'reveal-icon', 'aria-hidden': 'true', text: role === 'runner' ? '🏃' : '🔎' }),
+      el('div', { class: 'reveal-kicker', text: t('reveal.kicker') }),
+      el('h2', { text: t(`guide.${role}.title`) }),
+      el('p', { text: t(`reveal.${role}`) })),
+    withGuide ? guideSteps(role, false) : null,
+    el('button', { class: 'btn primary big', type: 'button', onclick: close, text: t('guide.ok') }),
+    withGuide ? el('button', { class: 'btn sm linkish', type: 'button', onclick: () => { close(); showRules(); }, text: t('guide.allRules') }) : null));
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.classList.remove('hidden');
+}
+
+// Ergebnis: Sieger, Bestenliste „am längsten frei“ und die eigene Bilanz
+function resultInfo() {
+  const { room, me } = S;
+  const end = room.endedAt || now();
+  const mins = (r) => Math.max(0, Math.round(((r.caughtAt || end) - room.startedAt) / 60000));
+  const board = S.runners.map((r) => ({ name: r.name, min: mins(r), free: !r.caughtAt }))
+    .sort((a, b) => b.min - a.min || a.name.localeCompare(b.name));
+  const w = room.result?.winner;
+  const mine = S.runners.find((r) => r.name === me.name);
+  const own = mine ? t(mine.caughtAt ? 'end.youCaught' : 'end.youFree', { min: mins(mine) })
+    : me.role === 'hunter' && board.length ? t('end.hunterCount', { n: board.filter((b) => !b.free).length, total: board.length }) : '';
+  return { winner: w || 'stopped', title: t(w === 'hunters' ? 'end.hunters' : w === 'runners' ? 'end.runners' : 'end.stopped'), board, own };
+}
+
+function resultCard(big) {
+  const r = resultInfo();
+  return el('div', { class: `result-card ${r.winner}${big ? ' big' : ''}` },
+    el('div', { class: 'result-icon', 'aria-hidden': 'true', text: r.winner === 'hunters' ? '🔎' : r.winner === 'runners' ? '🏃' : '🏁' }),
+    el('h2', { text: r.title }),
+    el('p', { class: 'small result-reason', text: resultText(S.room) }),
+    r.own ? el('p', { class: 'result-own', text: r.own }) : null,
+    r.board.length ? el('div', { class: 'result-board-title small', text: t('end.board') }) : null,
+    r.board.length ? el('ol', { class: 'result-board' }, r.board.slice(0, big ? 5 : 3).map((b, i) => el('li', {},
+      el('span', { class: 'rank', text: ['🥇', '🥈', '🥉'][i] || `${i + 1}.` }),
+      el('span', { class: 'who', text: b.name }),
+      el('span', { class: 'min', text: t(b.free ? 'end.freeMin' : 'end.min', { min: b.min }) })))) : null);
+}
+
+function showResultOverlay() {
+  if (!S || S.room.status !== 'ended') return;
+  const ov = $('#infoOverlay');
+  check.overlay = false;
+  const mp = S.room.meetingPoint;
+  const close = () => { ov.classList.add('hidden'); if (mp) fitToMeeting(); };
+  ov.replaceChildren(el('div', { class: 'card stack result-overlay' },
+    resultCard(true),
+    mp ? el('p', { class: 'small', style: 'text-align:center;margin:0', text: t('end.meeting', { label: mp.label }) }) : null,
+    el('button', { class: 'btn primary big', type: 'button', onclick: close, text: mp ? t('end.toMeeting') : t('common.ok') })));
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.classList.remove('hidden');
 }
 
 // Endspurt: einmal pro Spiel 5 Minuten vor Schluss – nicht bei sehr kurzen Spielen und nicht in den letzten Sekunden
@@ -542,6 +668,7 @@ function buildContent() {
   }
 
   // Nach Spielende: alle zum Treffpunkt
+  if (room.status === 'ended' && room.startedAt) box.append(resultCard(false));
   if (room.status === 'ended' && room.meetingPoint) box.append(meetingBlock(room.meetingPoint, true));
 
   // Handy-Check in der Lobby direkt sichtbar
@@ -1026,11 +1153,11 @@ function guideKey() {
 
 const guideSeen = () => new Set((store.get('mh_guide_seen') || '').split(',').filter(Boolean));
 
-function guideSteps(key) {
+function guideSteps(key, withTitle = true) {
   // Spielfeld und Vorwarnung nur erwähnen, wenn es sie in diesem Raum gibt
   const vars = { zone: S.room.zone ? t('guide.zone') : '', warn: S.room.pingWarningSec ? t('guide.warn') : '' };
   return el('div', { class: 'guide stack' },
-    el('h2', { text: t(`guide.${key}.title`) }),
+    withTitle ? el('h2', { text: t(`guide.${key}.title`) }) : null,
     el('ol', { class: 'guide-steps' }, [1, 2, 3].map((i) => el('li', { text: t(`guide.${key}.${i}`, vars) }))),
     el('p', { class: 'small', text: t('guide.sos') }));
 }
@@ -1047,6 +1174,7 @@ function maybeShowGuide() {
   const key = guideKey();
   const ov = $('#infoOverlay');
   if (!key || guideSeen().has(key) || !ov.classList.contains('hidden') || isHolding()) return;
+  if (key !== 'lobby') return showRoleReveal(key, true);
   const close = () => {
     store.set('mh_guide_seen', [...guideSeen(), key].join(','));
     ov.classList.add('hidden');

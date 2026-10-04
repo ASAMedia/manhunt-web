@@ -812,3 +812,107 @@ body.mission .time-btns .btn { flex: 1 1 0; }
 .room-tab .tab-count { font-size: .75rem; font-weight: 700; padding: .05rem .4rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
 .room-tab .tab-count.warn { background: var(--amber); color: var(--amber-text); }
 .room-tab .tab-count.danger { background: var(--danger-solid); color: #fff; }
+
+/* ---------------------------------------------------------------------------
+   Spielmomente: Ping-Ring, 3-2-1, Rollen-Karte, Ergebnis · Start- und Beitrittsseite
+   --------------------------------------------------------------------------- */
+
+/* Nächster Ping als Fortschrittsring */
+.ring-timer { display: flex; align-items: center; gap: .6rem; }
+.ring-timer svg { flex: none; width: 3.3rem; height: 3.3rem; transform: rotate(-90deg); }
+.ring-timer .ring-bg { fill: none; stroke: var(--border); stroke-width: 7; }
+.ring-timer .ring-fg { fill: none; stroke: var(--primary); stroke-width: 7; stroke-linecap: round; }
+.ring-timer.soon { background: color-mix(in srgb, var(--amber) 28%, var(--surface-2)); }
+.ring-timer.soon .ring-fg { stroke: #d99a00; }
+.ring-timer.head { flex: 1 1 100%; }
+.ring-timer.head svg { width: 4.6rem; height: 4.6rem; }
+.ring-timer.head .value { font-size: 2.1rem; line-height: 1.1; }
+.ring-timer .hero-line { font-weight: 700; font-size: .95rem; }
+:root[data-theme="sun"] .ring-timer .ring-bg { stroke: #999; }
+@media (prefers-reduced-motion: no-preference) {
+  .ring-timer.soon .ring-fg { animation: ring-blink 1s ease-in-out infinite; }
+}
+@keyframes ring-blink { 50% { opacity: .45; } }
+
+/* 3-2-1 beim Start */
+.countdown {
+  position: fixed; inset: 0; z-index: 2600; display: grid; place-content: center; text-align: center; gap: .5rem;
+  background: #1b1f24; color: #fff; padding: 24px; cursor: pointer;
+}
+.countdown.runner { background: var(--runner); }
+.countdown.hunter { background: var(--hunter); }
+.countdown .cd-num { font-size: min(42vw, 11rem); font-weight: 900; line-height: 1; }
+.countdown .cd-sub { font-size: 1.25rem; font-weight: 700; max-width: 22rem; margin: 0 auto; }
+@media (prefers-reduced-motion: no-preference) {
+  .countdown .cd-num.pop { animation: cd-pop .5s cubic-bezier(.2, .9, .3, 1.3); }
+}
+@keyframes cd-pop { 0% { transform: scale(1.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* Rollen-Karte */
+.reveal-card { padding-top: 0; overflow: hidden; }
+.reveal-card .reveal-head {
+  margin: 0 -1rem; padding: 1.4rem 1rem 1.1rem; text-align: center; color: #fff;
+  background: var(--primary);
+}
+.reveal-card.runner .reveal-head { background: var(--runner); }
+.reveal-card.hunter .reveal-head { background: var(--hunter); }
+.reveal-card .reveal-icon { font-size: 3.2rem; line-height: 1.1; }
+.reveal-card .reveal-kicker { text-transform: uppercase; letter-spacing: .1em; font-size: .8rem; font-weight: 700; opacity: .9; }
+.reveal-card .reveal-head h2 { font-size: 1.9rem; margin: .1rem 0 .35rem; color: #fff; }
+.reveal-card .reveal-head p { margin: 0; font-weight: 500; }
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-card, .result-overlay { animation: card-in .45s cubic-bezier(.2, .9, .3, 1.2); }
+}
+@keyframes card-in { 0% { transform: scale(.85) translateY(20px); opacity: 0; } 100% { transform: none; opacity: 1; } }
+
+/* Ergebnis */
+.result-card { text-align: center; border-radius: var(--radius); padding: 1rem; background: var(--result-bg); }
+.result-card.hunters { background: color-mix(in srgb, var(--hunter) 14%, var(--surface)); }
+.result-card.runners { background: color-mix(in srgb, var(--runner) 14%, var(--surface)); }
+.result-card .result-icon { font-size: 2.2rem; line-height: 1.1; }
+.result-card.big .result-icon { font-size: 3.2rem; }
+.result-card h2 { margin: .2rem 0; font-size: 1.35rem; }
+.result-card.big h2 { font-size: 1.7rem; }
+.result-card .result-reason { color: var(--muted); margin: 0 0 .4rem; }
+.result-card .result-own { font-weight: 700; font-size: 1.05rem; margin: .2rem 0 .5rem; }
+.result-card .result-board-title { text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--muted); margin-top: .3rem; }
+.result-board { list-style: none; padding: 0; margin: .3rem auto 0; max-width: 20rem; text-align: left; }
+.result-board li { display: flex; gap: .5rem; align-items: center; padding: .3rem 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+.result-board li:last-child { border-bottom: 0; }
+.result-board .rank { width: 1.8rem; text-align: center; }
+.result-board .who { flex: 1; font-weight: 600; }
+.result-board .min { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.result-overlay { padding: .5rem; }
+
+/* Start- und Beitrittsseite */
+.start-page { background: radial-gradient(circle at 50% -15%, color-mix(in srgb, var(--primary) 22%, var(--bg)), var(--bg) 65%) fixed; }
+.brand { display: flex; flex-direction: column; align-items: center; gap: .3rem; text-align: center; margin-bottom: .25rem; }
+.brand .brand-logo { width: 76px; height: 76px; filter: drop-shadow(0 6px 14px rgb(0 0 0 / .18)); }
+.brand.small .brand-logo { width: 52px; height: 52px; }
+.brand h1 { margin: 0; font-size: 2.1rem; }
+.brand.small h1 { font-size: 1.7rem; }
+.brand .tagline { margin: 0; color: var(--muted); font-weight: 500; }
+.brand .kicker { text-transform: uppercase; letter-spacing: .08em; font-size: .78rem; font-weight: 700; color: var(--muted); }
+.start-page .code-input {
+  font: 800 2rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .3em; text-indent: .3em;
+  text-align: center; text-transform: uppercase; padding: .45em .3em;
+}
+.start-page .code-input::placeholder { color: color-mix(in srgb, var(--muted) 45%, transparent); }
+.big-input { font-size: 1.25rem; padding: .7em .8em; }
+.how-steps { list-style: none; margin: .25rem 0 0; padding: 0 .25rem; display: grid; gap: .7rem; }
+.how-steps li { display: flex; gap: .75rem; align-items: flex-start; }
+.how-steps li > div { display: flex; flex-direction: column; }
+.how-steps .step-n {
+  flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%; display: grid; place-items: center;
+  background: var(--primary); color: var(--primary-text); font-weight: 800;
+}
+.progress-steps { list-style: none; margin: 0 auto; padding: 0; display: flex; justify-content: center; gap: .35rem; counter-reset: st; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.progress-steps li { display: flex; align-items: center; gap: .3rem; counter-increment: st; }
+.progress-steps li::before {
+  content: counter(st); width: 1.45rem; height: 1.45rem; border-radius: 50%; display: grid; place-items: center;
+  border: 2px solid var(--border); background: var(--surface); color: var(--muted);
+}
+.progress-steps li:not(:last-child)::after { content: ''; width: 1.1rem; height: 2px; background: var(--border); margin-left: .1rem; }
+.progress-steps li.done::before { content: '✓'; background: var(--ok); border-color: var(--ok); color: #fff; }
+.progress-steps li.current { color: var(--text); }
+.progress-steps li.current::before { background: var(--primary); border-color: var(--primary); color: #fff; }

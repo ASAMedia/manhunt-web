@@ -10,16 +10,25 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/style.css">
 </head>
-<body class="center-page">
+<body class="center-page start-page">
   <main class="stack">
     <div class="lang-corner" id="langSlot"></div>
-    <h1>Manhunt</h1>
-    <p class="muted" style="text-align:center" data-i18n="idx.intro">Scanne den QR-Code der Spielleitung oder gib den Spielcode ein.</p>
+    <header class="brand">
+      <img class="brand-logo" src="/icon.svg" alt="" width="76" height="76">
+      <h1>Manhunt</h1>
+      <p class="tagline" data-i18n="idx.tagline">Das Fangspiel durch die Stadt</p>
+    </header>
+    <a id="resume" class="btn primary big hidden" href="/play"></a>
     <form id="codeForm" class="card stack">
-      <input id="code" class="code-input" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Spielcode" data-i18n-title="idx.code" required>
+      <label class="field" for="code" data-i18n="idx.code">Spielcode</label>
+      <input id="code" class="code-input" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC123" required>
       <button class="btn primary big" type="submit" data-i18n="idx.join">Beitreten</button>
     </form>
-    <a id="resume" class="btn big hidden" href="/play"></a>
+    <ol class="how-steps">
+      <li><span class="step-n" aria-hidden="true">1</span><div><strong data-i18n="idx.s1t">QR-Code scannen</strong><span class="small muted" data-i18n="idx.s1">oder oben den Code der Spielleitung eingeben</span></div></li>
+      <li><span class="step-n" aria-hidden="true">2</span><div><strong data-i18n="idx.s2t">Namen eingeben</strong><span class="small muted" data-i18n="idx.s2">bei Jäger-Teams den Teamnamen</span></div></li>
+      <li><span class="step-n" aria-hidden="true">3</span><div><strong data-i18n="idx.s3t">Standort freigeben &amp; loslegen</strong><span class="small muted" data-i18n="idx.s3">Seite offen lassen, Display an</span></div></li>
+    </ol>
     <p style="text-align:center" class="small">
       <a class="muted" href="/datenschutz" data-i18n="common.privacy">Datenschutz</a> ·
       <a class="muted" href="/admin" data-i18n="idx.admin">Spielleitung</a>

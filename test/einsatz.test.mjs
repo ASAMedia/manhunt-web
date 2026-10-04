@@ -162,6 +162,7 @@ export default async function einsatz({ base, adminPass, supPass, check, section
   const used = new Set([...play.matchAll(/\bt\('([\w.]+)'/g)].map((m) => m[1]));
   for (const g of ['lobby', 'runner', 'hunter']) for (const k of ['title', '1', '2', '3']) used.add(`guide.${g}.${k}`);
   for (const k of ['final.runner', 'final.hunter', 'final.other', 'outbox.caught', 'outbox.block', 'outbox.sos']) used.add(k);
+  for (const k of ['reveal.runner', 'reveal.hunter', 'end.hunters', 'end.runners', 'end.stopped', 'end.youCaught', 'end.youFree', 'end.hunterCount', 'end.min', 'end.freeMin', 'hero.runner', 'hero.hunter', 'countdown.runner', 'countdown.runnerNow', 'countdown.hunter', 'countdown.hunterNow', 'countdown.other', 'step.1', 'step.2', 'step.3', 'idx.tagline', 'join.joining']) used.add(k);
   const missing = [...used].filter((k) => !de.has(k) || !en.has(k));
   check(missing.length === 0, `alle ${used.size} Texte der Spielerseite gibt es auf Deutsch und Englisch`, missing);
   const onlyDe = [...de].filter((k) => !en.has(k));

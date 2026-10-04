@@ -14,7 +14,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 
 | | |
 |---|---|
-| Räume & Beitritt | beliebig viele Räume; Beitritt per QR-Code oder 6-stelligem Code; Beitritt schließbar |
+| Räume & Beitritt | beliebig viele Räume; Beitritt per QR-Code oder 6-stelligem Code (große Code-Eingabe, Schritte Code → Name → Loslegen); Beitritt schließbar |
 | Rollen | pro Gerät setzen oder „N Gejagte auslosen“; wer später beitritt, wird automatisch Jäger |
 | Pings | frei wählbares Intervall (1–180 min), erster Ping am Ende des Vorsprungs; **Vorwarnung** kurz vorher. Beim Ping sehen die Jäger die Gejagten – und die Gejagten die Jäger (jeweils als Momentaufnahme, beschriftet mit dem **Alter**, z. B. „vor 3 min“) |
 | Extra-Pings | gemeinsamer Vorrat für alle Jäger; die Spielleitung kann jederzeit einen Sofort-Ping auslösen |
@@ -22,6 +22,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Fangen | Gejagte melden sich selbst als gefangen und **werden dann Jäger**; die Spielleitung kann korrigieren |
 | Spielfeld | **Kreis oder frei gezeichnete Fläche** (z. B. entlang von Spree und S-Bahn-Ring); optional **schrumpfend** bis Spielende – bei Flächen nur, wenn sie dabei nicht aus sich herauswandern (keine U- oder L-Formen) |
 | Verkehrsmittel (Option) | Mister-X-Stil: Gejagte melden U-Bahn, S-Bahn, Bus, Tram oder zu Fuß – Jäger sehen nur die Art |
+| **Spielmomente** | Rollen verteilt → Vollbild-Rollenkarte; Start → 3-2-1 auf allen Handys und großer Vorsprung-Ring; nächster Ping als Ring (kurz vorher gelb); Spielende → Ergebnis-Bildschirm mit Bestenliste „am längsten frei“ und eigener Zeit |
 | **Endspurt** | 5 Minuten vor Schluss Banner und Ton auf allen Handys; bei Spielende automatisch „Alle zum Treffpunkt“ mit Fußweg-Route |
 | **Spielzeit ändern** | „+10 min“ / „−10 min“ im laufenden Spiel (nur diese Runde); alle Handys bekommen Bescheid, ein schrumpfendes Spielfeld schrumpft gleichmäßig bis zum neuen Ende |
 | **Funkloch-Puffer** | „Ich wurde gefangen“, Verkehrsmittel, Block und SOS gehen ohne Netz (U-Bahn) nicht verloren: Sie warten auf dem Handy – auch über Neuladen hinweg – und werden mit dem Zeitpunkt des Tipps nachgesendet. SOS zeigt im Funkloch sofort die Notfallnummer |

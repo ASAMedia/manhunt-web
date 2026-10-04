@@ -15,6 +15,12 @@ if (token) {
     .catch((e) => { if (e.status === 401) store.del('mh_token'); });
 }
 
+// Code beim Tippen gleich in Großbuchstaben, ohne Leer- und Sonderzeichen
+$('#code').addEventListener('input', (e) => {
+  const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); // auch eingefügte Codes wie „abc 123“
+  if (v !== e.target.value) e.target.value = v;
+});
+
 $('#codeForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const code = $('#code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
