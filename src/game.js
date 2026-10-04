@@ -456,6 +456,19 @@ function addBots(room, runners, hunters) {
 
 // Alle Geräte auf einmal entfernen, z. B. für die nächste Klasse. Nicht im laufenden Spiel – das würde es
 // sonst mit „Alle Gejagten gefangen“ beenden. Einstellungen, Verlauf und Auswertung bleiben.
+// Auswertung zurücksetzen (z. B. nach dem Probelauf): Runden-Auswertung und Ping-Replay löschen,
+// die Rundenzählung beginnt wieder bei 1. Verlauf, Geräte und Einstellungen bleiben.
+function resetEvaluation(room) {
+  if (room.status === 'running') throw new HttpError(409, 'Erst das Spiel beenden – dann lässt sich die Auswertung zurücksetzen.');
+  const rounds = room.rounds.length;
+  room.rounds = [];
+  room.pings = [];
+  room.roundNo = 0;
+  logEvent(room, `Auswertung zurückgesetzt (${rounds} ${rounds === 1 ? 'Runde' : 'Runden'} und Ping-Replay gelöscht)`, false, true);
+  markDirty();
+  return rounds;
+}
+
 function removeAllPlayers(room) {
   if (room.status === 'running') throw new HttpError(409, 'Erst das Spiel beenden – dann lassen sich alle Geräte entfernen.');
   const players = playersOf(room);
@@ -594,7 +607,7 @@ module.exports = {
   createRoom, deleteRoom, applySettings,
   startGame, endGame, adjustTime, actionTime, roundMinutes, backToLobby, doPing, armBlock, catchRunner, releaseRunner, drawRoles, removePlayer,
   currentZone, updateZoneFlag, roomWarnings,
-  addBots, removeBots, removeAllPlayers,
+  addBots, removeBots, removeAllPlayers, resetEvaluation,
   activeEmergency, raiseEmergency, resolveEmergency,
   autoDeleteAt, autoDelete, startGameTimers,
 };

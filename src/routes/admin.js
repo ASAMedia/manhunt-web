@@ -163,6 +163,13 @@ route('DELETE', '/api/admin/rooms/:id/players', (req, res, { id }) => {
   return adminRoom(room);
 });
 
+route('DELETE', '/api/admin/rooms/:id/rounds', (req, res, { id }) => {
+  requireAdmin(req);
+  const room = getRoom(id);
+  game.resetEvaluation(room);
+  return adminRoom(room);
+});
+
 route('DELETE', '/api/admin/rooms/:id/bots', (req, res, { id }) => {
   requireAdmin(req);
   const room = getRoom(id);

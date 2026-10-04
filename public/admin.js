@@ -813,6 +813,16 @@ $('#removeAllBox').prepend(holdButton({
   },
 }));
 
+// „Auswertung zurücksetzen“: ebenfalls nur einmal bauen, 3 Sekunden halten
+$('#resetEvalBox').prepend(holdButton({
+  text: 'Auswertung zurücksetzen (3 s gedrückt halten)', holdText: 'Weiter halten … Auswertung wird gelöscht', ms: 3000, cls: 'danger',
+  title: 'Auswertung aller Runden und Ping-Replay löschen – 3 Sekunden gedrückt halten',
+  onConfirm: async () => {
+    const n = R?.rounds.length || 0;
+    if (await act('DELETE', '/rounds')) toast(n ? `Auswertung zurückgesetzt (${n} ${n === 1 ? 'Runde' : 'Runden'} gelöscht)` : 'Ping-Replay gelöscht');
+  },
+}));
+
 function renderPlayers() {
   // nicht im laufenden Spiel und nur, wenn es etwas zu entfernen gibt
   $('#removeAllBox').classList.toggle('hidden', !isAdmin() || R.status === 'running' || !R.players.length);
@@ -1207,6 +1217,8 @@ const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
 let roundsKey = '';
 function renderRounds() {
+  // Zurücksetzen nur durch die Spielleitung, nicht im laufenden Spiel und nur, wenn es etwas zu löschen gibt
+  $('#resetEvalBox').classList.toggle('hidden', !isAdmin() || R.status === 'running' || (!R.rounds.length && !R.replayPings));
   $('#replayBtn').disabled = !R.replayPings || R.status === 'running';
   $('#replayBtn').title = R.status === 'running' ? 'Das Replay gibt es erst nach Spielende'
     : R.replayPings ? 'Alle Pings der letzten Runde als Zeitraffer – z. B. für den Beamer (bis zum Start der nächsten Runde)'

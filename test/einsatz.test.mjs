@@ -132,6 +132,27 @@ export default async function einsatz({ base, adminPass, supPass, check, section
   const runa = (await req('GET', '/api/play/state', undefined, { token: st2.Runa })).data.me;
   check(again.status === 409 && runa.blocksLeft === 1, 'doppelt nachgesendeter Block wird nicht zweimal verbraucht', { status: again.status, left: runa.blocksLeft });
 
+  section('Auswertung zurücksetzen');
+  const { r: er } = await mk('Auswertung', {});
+  check((await req('DELETE', `/api/admin/rooms/${er.id}/rounds`, undefined, A)).status === 200, 'Lobby ohne Auswertung: Zurücksetzen geht (nichts zu tun)');
+  await req('POST', `/api/admin/rooms/${er.id}/start`, undefined, A);
+  await req('POST', `/api/admin/rooms/${er.id}/ping`, undefined, A);
+  const whileRunning = await req('DELETE', `/api/admin/rooms/${er.id}/rounds`, undefined, A);
+  check(whileRunning.status === 409, 'im laufenden Spiel → abgelehnt', whileRunning.data);
+  await req('POST', `/api/admin/rooms/${er.id}/end`, undefined, A);
+  let ev1 = (await req('GET', `/api/admin/rooms/${er.id}`, undefined, A)).data;
+  check(ev1.rounds.length === 1 && ev1.replayPings > 0, 'nach Spielende: 1 Runde und Ping-Replay vorhanden');
+  check((await req('DELETE', `/api/admin/rooms/${er.id}/rounds`, undefined, SUP)).status === 403, 'Aufsicht darf die Auswertung nicht zurücksetzen');
+  const reset = await req('DELETE', `/api/admin/rooms/${er.id}/rounds`, undefined, A);
+  check(reset.status === 200 && reset.data.rounds.length === 0 && reset.data.replayPings === 0, 'Zurücksetzen: Runden und Ping-Replay leer');
+  check(reset.data.events.some((e) => e.text.startsWith('Auswertung zurückgesetzt (1 Runde')), 'Verlauf bleibt und vermerkt das Zurücksetzen');
+  check((await req('GET', `/api/admin/rooms/${er.id}/export/auswertung.csv`, undefined, A)).status === 200, 'CSV-Export geht danach weiter');
+  await req('POST', `/api/admin/rooms/${er.id}/lobby`, undefined, A);
+  await req('POST', `/api/admin/rooms/${er.id}/start`, undefined, A);
+  ev1 = (await req('GET', `/api/admin/rooms/${er.id}`, undefined, A)).data;
+  check(ev1.events.some((e) => e.text.startsWith('Runde 1 gestartet')) && ev1.events.filter((e) => e.text.startsWith('Runde 1 gestartet')).length === 2, 'nächste Runde zählt wieder als Runde 1');
+  await req('POST', `/api/admin/rooms/${er.id}/end`, undefined, A);
+
   section('Übersetzungen der neuen Texte');
   const src = fs.readFileSync(path.join(ROOT, 'public/i18n.js'), 'utf8');
   const [dePart, enPart] = src.split(/\n {2}en: \{/);

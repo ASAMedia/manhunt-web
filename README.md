@@ -45,7 +45,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit; Geräte-Liste mit **Ampelpunkt** und **Akku-Symbol**; am Computer **Reiter** (Spiel · Geräte · Einstellungen · Auswertung), die Karte bleibt rechts |
 | Nachricht an alle | z. B. Spielabbruch; Schnellknopf „Alle zum Treffpunkt rufen“ |
 | Wiederbeitritt | QR-Code pro Gerät, falls ein Handy ausfällt |
-| Schutz vor Versehen | „Spiel verlassen“, „Aus dem Raum entfernen“, „Raum löschen“ nur durch 2 s Gedrückthalten; „Alle Geräte entfernen“ (nicht im laufenden Spiel) durch 3 s |
+| Schutz vor Versehen | „Spiel verlassen“, „Aus dem Raum entfernen“, „Raum löschen“ nur durch 2 s Gedrückthalten; „Alle Geräte entfernen“ und „Auswertung zurücksetzen“ (beides nicht im laufenden Spiel) durch 3 s |
 
 **Vorbereitung & Nachbereitung**
 
