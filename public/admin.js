@@ -390,19 +390,21 @@ async function loadList() {
     $('#noRooms').classList.toggle('hidden', rooms.length > 0);
     renderCopySelect(rooms);
     loadClientErrors();
+    // Raumkarten: Farbstreifen je Status (Notfall rot), große Zahlen, Hinweise als Abzeichen
+    const stat = (n, label, cls = '') => el('div', { class: `room-stat ${cls}` }, el('strong', { text: String(n) }), el('span', { text: label }));
     swapIfChanged($('#roomGrid'), rooms.map((r) => el('button', {
-      class: 'card room-card stack', type: 'button', onclick: () => { location.hash = `room=${r.id}`; },
+      class: `card room-card status-${r.status}${r.emergencies ? ' has-sos' : ''}`, type: 'button', onclick: () => { location.hash = `room=${r.id}`; },
     },
-    el('div', { class: 'row', style: 'justify-content:space-between' },
-      el('strong', { text: r.name }),
-      el('span', { class: 'row' },
-        r.emergencies ? el('span', { class: 'badge danger', text: '🚨 Notfall' }) : null,
-        r.warnings ? el('span', { class: 'badge warn', text: `⚠ ${r.warnings}` }) : null,
-        r.bots ? el('span', { class: 'badge', text: 'Probespiel' }) : null,
-        el('span', { class: `badge ${r.status === 'running' ? 'running' : ''}`, text: STATUS_LABEL[r.status] }))),
-    el('div', { class: 'small muted' },
-      'Code ', el('span', { class: 'code', text: r.code }), ` · ${r.players} Geräte · ${r.runners} Gejagte · ${r.hunters} Jäger`),
-    el('div', { class: 'small muted', text: `Erstellt ${fmtDate(r.createdAt)}${r.joinOpen ? '' : ' · Beitritt geschlossen'}` }),
+    el('div', { class: 'room-card-head' },
+      el('strong', { class: 'room-name', text: r.name }),
+      el('span', { class: `badge ${r.status === 'running' ? 'running' : ''}`, text: STATUS_LABEL[r.status] })),
+    r.emergencies || r.warnings || r.bots || !r.joinOpen ? el('div', { class: 'row room-badges' },
+      r.emergencies ? el('span', { class: 'badge danger', text: '🚨 Notfall' }) : null,
+      r.warnings ? el('span', { class: 'badge warn', text: `⚠ ${r.warnings} ${r.warnings === 1 ? 'Warnung' : 'Warnungen'}` }) : null,
+      r.bots ? el('span', { class: 'badge', text: 'Probespiel' }) : null,
+      r.joinOpen ? null : el('span', { class: 'badge', text: 'Beitritt geschlossen' })) : null,
+    el('div', { class: 'room-stats' }, stat(r.players, 'Geräte'), stat(r.runners, 'Gejagte', 'runner'), stat(r.hunters, 'Jäger', 'hunter')),
+    el('div', { class: 'small muted' }, 'Code ', el('span', { class: 'code', text: r.code }), ` · erstellt ${fmtDate(r.createdAt)}`),
     r.autoDeleteAt ? el('div', { class: 'small muted', text: `Wird am ${fmtDate(r.autoDeleteAt)} automatisch gelöscht` }) : null,
     )));
   } catch (e) {

@@ -33,7 +33,7 @@ function manifest(url) {
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#0f1216',
-    theme_color: '#d13b3b',
+    theme_color: '#1f6feb',
     lang: 'de',
     icons: [
       { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },

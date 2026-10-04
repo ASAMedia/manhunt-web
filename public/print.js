@@ -24,20 +24,29 @@ async function init() {
     ['Spieldauer', `${s.durationMin} Minuten`],
     s.zone ? ['Spielfeld', `${s.zone.points ? 'markierte Fläche auf der Karte' : `Kreis mit ${s.zone.radius} m Radius`}${s.shrinkEnabled ? `, schrumpft bis zum Ende${s.zone.points ? '' : ` auf ${s.shrinkFinalRadius} m`}` : ''}`] : null,
     s.meetingPoint ? ['Treffpunkt', s.meetingPoint.label] : null,
+    ['Auf der Karte', 'legend'],
     ['Notfall', `SOS-Knopf oben rechts 1,5 Sekunden gedrückt halten${s.emergencyPhone ? ` · Spielleitung: ${noBreak(s.emergencyPhone)}` : ''} · Lebensgefahr: 112`],
   ].filter(Boolean);
 
+  // Farben wie in der App: Jäger orange, Gejagte blau, Rot nur für Notfälle
+  const legend = () => el('dd', {},
+    el('span', { class: 'legend-dot hunter' }), 'Jäger', el('span', { class: 'legend-dot runner' }), 'Gejagte',
+    el('span', { class: 'legend-dot sos' }), 'Notfall · gestrichelte Linie = Spielfeld · 🏁 Treffpunkt');
+  const step = (n, title, sub) => el('li', {}, el('span', { class: 'step-n', text: String(n) }),
+    el('div', {}, title, sub ? el('span', { class: 'sub' }, ...sub) : null));
   $('#sheet').replaceChildren(
-    el('h1', { text: `Manhunt – ${room.name}` }),
+    el('header', { class: 'sheet-head' },
+      el('img', { src: '/icon.svg', alt: '' }),
+      el('div', {}, el('div', { class: 'kicker', text: 'Manhunt – Das Fangspiel durch die Stadt' }), el('h1', { text: room.name }))),
     el('section', { class: 'sheet-join' },
       el('img', { src: `/api/admin/qr.svg?text=${encodeURIComponent(url)}`, alt: 'QR-Code zum Beitreten' }),
       el('div', { class: 'stack' },
-        el('p', { class: 'big', text: '1. QR-Code scannen' }),
-        el('p', {}, 'oder ', el('strong', { text: base.replace(/^https?:\/\//, '') }), ' öffnen und den Code eingeben:'),
-        el('div', { class: 'big-code', text: room.code }),
-        el('p', { class: 'big', text: '2. Namen eingeben (Jäger-Teams: Teamname)' }),
-        el('p', { class: 'big', text: '3. „Standort freigeben & loslegen“ – Seite offen und Display an lassen' }))),
-    el('dl', { class: 'sheet-facts' }, facts.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })])),
+        el('ol', { class: 'sheet-steps' },
+          step(1, 'QR-Code scannen', ['oder ', el('strong', { text: base.replace(/^https?:\/\//, '') }), ' öffnen und den Code eingeben:']),
+          el('li', {}, el('div', { class: 'big-code', text: room.code })),
+          step(2, 'Namen eingeben', ['bei Jäger-Teams den Teamnamen']),
+          step(3, '„Standort freigeben & loslegen“', ['Seite offen lassen, Display an, Powerbank mitnehmen'])))),
+    el('dl', { class: 'sheet-facts' }, facts.flatMap(([k, v]) => [el('dt', { text: k }), v === 'legend' ? legend() : el('dd', { text: v })])),
     el('section', { class: 'sheet-rules' }, el('div', { class: 'rules-text', text: rulesText(s) })),
   );
 }

@@ -21,8 +21,8 @@ function card() {
   const phone2 = $('#phone2').value.trim();
   return el('section', { class: 'ncard' },
     el('header', {},
-      el('strong', { text: 'Notfallkarte' }),
-      el('span', { text: room.name })),
+      el('span', { class: 'ncard-brand' }, el('img', { src: '/icon.svg', alt: '' }), el('strong', { text: 'Notfallkarte' })),
+      el('span', { text: `Manhunt · ${room.name}` })),
     el('div', { class: 'ncard-row' }, el('b', { text: 'Gruppe: ' }), blank()),
     el('div', { class: 'ncard-meet' },
       el('div', {},

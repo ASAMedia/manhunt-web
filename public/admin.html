@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Manhunt – Spielleitung</title>
-  <meta name="theme-color" content="#d13b3b">
+  <meta name="theme-color" content="#1f6feb">
   <link rel="manifest" href="/manifest.webmanifest?app=admin">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -13,15 +13,20 @@
 </head>
 <body>
   <!-- Anmeldung -->
-  <div id="loginView" class="center-page hidden">
+  <div id="loginView" class="center-page start-page hidden">
     <main class="stack">
-      <h1>Spielleitung</h1>
+      <header class="brand">
+        <img class="brand-logo" src="/icon.svg" alt="" width="76" height="76">
+        <h1>Spielleitung</h1>
+        <p class="tagline">Manhunt – Das Fangspiel durch die Stadt</p>
+      </header>
       <form id="loginForm" class="card stack">
         <label class="field" for="password">Passwort (Spielleitung oder Aufsicht)</label>
         <input id="password" type="password" autocomplete="current-password" required>
         <button class="btn primary big" type="submit">Anmelden</button>
         <p id="loginErr" class="error"></p>
       </form>
+      <p class="small" style="text-align:center"><a class="muted" href="/">Zur Startseite für Spieler</a></p>
     </main>
   </div>
 
@@ -42,11 +47,14 @@
           <button id="logoutBtn" class="btn sm" type="button">Abmelden</button>
         </div>
       </div>
-      <form id="newRoomForm" class="card row admin-only" style="margin-bottom:1rem">
-        <input id="newRoomName" maxlength="40" placeholder="Name des neuen Raums, z. B. Runde 1" aria-label="Raumname">
-        <select id="copyFrom" aria-label="Einstellungen übernehmen von" title="Spielfeld, Treffpunkt, Regeln und alle Einstellungen eines bestehenden Raums übernehmen (ohne Geräte)">
-          <option value="">Neue Einstellungen</option>
-        </select>
+      <form id="newRoomForm" class="card new-room admin-only" style="margin-bottom:1rem">
+        <h2>Neuer Raum</h2>
+        <label class="field">Name<input id="newRoomName" maxlength="40" placeholder="z. B. Runde 1 oder Klasse 10a"></label>
+        <label class="field">Einstellungen
+          <select id="copyFrom" title="Spielfeld, Treffpunkt, Regeln und alle Einstellungen eines bestehenden Raums übernehmen (ohne Geräte)">
+            <option value="">Neue Einstellungen</option>
+          </select>
+        </label>
         <button class="btn primary" type="submit">Raum erstellen</button>
       </form>
       <!-- Einrichtungs-Check (nur Spielleitung): ist der Server bereit für den Einsatz? -->

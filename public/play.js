@@ -301,12 +301,30 @@ function vibrate(pattern) {
 
 function showBanner(id, text, { cls = '', sticky = false, onClose } = {}) {
   document.getElementById(`banner-${id}`)?.remove();
-  const close = () => { node.remove(); onClose?.(); };
+  const close = () => { node.remove(); onClose?.(); layoutBanners(); };
   const node = el('div', { class: `banner ${cls}`, id: `banner-${id}` },
     el('span', { text }),
     el('button', { class: 'btn sm', type: 'button', onclick: close, text: t('common.ok') }));
   $('#banners').append(node);
-  if (!sticky) setTimeout(() => node.remove(), 10000);
+  if (!sticky) setTimeout(() => { node.remove(); layoutBanners(); }, 10000);
+  layoutBanners();
+}
+
+// Höchstens zwei Banner gleichzeitig (die neuesten) – ältere klappen zu „+N weitere“ zusammen, damit die Karte frei bleibt
+let bannersOpen = false;
+function layoutBanners() {
+  const box = $('#banners');
+  const items = [...box.querySelectorAll('.banner')];
+  if (items.length <= 2) bannersOpen = false;
+  const hidden = bannersOpen ? 0 : Math.max(0, items.length - 2);
+  items.forEach((b, i) => b.classList.toggle('stacked', i < hidden));
+  let more = box.querySelector('.banner-more');
+  if (items.length <= 2) { more?.remove(); return; }
+  if (!more) {
+    more = el('button', { class: 'banner-more', type: 'button', onclick: () => { bannersOpen = !bannersOpen; layoutBanners(); } });
+    box.prepend(more);
+  }
+  more.textContent = bannersOpen ? t('banner.fewer') : t('banner.more', { n: hidden });
 }
 
 function detectChanges() {
@@ -386,7 +404,7 @@ function detectChanges() {
   const msg = room.message;
   if (msg && store.get('mh_msg_seen') !== msg.id && !document.getElementById('banner-msg')) {
     showBanner('msg', t('banner.message', { text: msg.text }), {
-      cls: 'message', sticky: true, onClose: () => store.set('mh_msg_seen', msg.id),
+      cls: 'message', sticky: true, onClose: () => { store.set('mh_msg_seen', msg.id); render(); },
     });
     vibrate([400, 150, 400]);
     sound('message');
@@ -439,7 +457,9 @@ function renderTimers() {
   const now_ = now();
   const items = [];
   if (room.status === 'lobby') {
-    items.push(timer(t('timer.status'), t('timer.waiting')));
+    items.push(el('div', { class: 'timer waiting' },
+      el('span', { class: 'wait-pulse', 'aria-hidden': 'true' }),
+      el('div', {}, el('div', { class: 'value', text: t('timer.waiting') }), el('div', { class: 'label', text: t('wait.sub') }))));
   } else if (room.status === 'running') {
     items.push(pingRing(room, now_));
     items.push(timer(t('timer.end'), fmtCountdown(room.endsAt - now_), room.endsAt - now_ <= FINAL_MS ? 'urgent' : ''));
@@ -667,6 +687,11 @@ function buildContent() {
       el('button', { class: 'btn', type: 'button', onclick: cancelSos, text: t('sos.cancel') })));
   }
 
+  // Nachricht der Spielleitung bleibt nach dem Wegklicken des Banners hier lesbar
+  if (room.message && store.get('mh_msg_seen') === room.message.id) {
+    box.append(el('div', { class: 'message-note' }, el('strong', { text: t('msg.pinned') }), ` ${room.message.text}`));
+  }
+
   // Nach Spielende: alle zum Treffpunkt
   if (room.status === 'ended' && room.startedAt) box.append(resultCard(false));
   if (room.status === 'ended' && room.meetingPoint) box.append(meetingBlock(room.meetingPoint, true));
@@ -742,7 +767,8 @@ function buildContent() {
   }
 
   if (room.status === 'lobby' && S.lobby) {
-    box.append(el('h3', { text: t('list.inRoom', { n: S.lobby.length }) }), el('p', { class: 'small muted', text: S.lobby.join(', ') }));
+    box.append(el('h3', { text: t('list.inRoom', { n: S.lobby.length }) }),
+      el('div', { class: 'chips' }, S.lobby.map((n) => el('span', { class: `chip${n === me.name ? ' me' : ''}`, text: n }))));
   }
 
   if (room.zone) {
@@ -898,7 +924,17 @@ function checkCard() {
       el('h3', { style: 'margin:0', text: t('check.title') }),
       allOk ? el('span', { class: 'badge running', text: t('check.allOk') }) : null),
     allOk ? null : small(t('check.intro')),
+    checkProgress(c),
     gpsRow, screenRow, soundRow, batteryRow, vibrateRow, appRow, mapRow);
+}
+
+function checkProgress(c) {
+  const n = [(c.gps === 'ok' || c.gps === 'weak'), c.wakeLock === 'ok', c.sound === 'ok'].filter(Boolean).length;
+  const bar = el('span', { class: 'check-bar-fill' });
+  bar.style.width = `${Math.round((n / 3) * 100)}%`;
+  return el('div', { class: `check-progress${n === 3 ? ' done' : ''}` },
+    el('span', { class: 'check-bar', 'aria-hidden': 'true' }, bar),
+    el('span', { class: 'small', text: t('check.progress', { n, total: 3 }) }));
 }
 
 function testSound() {
