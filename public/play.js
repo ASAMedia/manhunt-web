@@ -1,6 +1,6 @@
 import {
   $, api, el, store, fmtCountdown, fmtTime, distanceM, createMap, labeledMarker, meetingMarker, cssVar, getConfig,
-  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, isTemporary, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone, zoneBounds, errorContext,
+  holdButton, isHolding, unlockAudio, playSound, SOUNDS, routeUrl, isTemporary, declutterLabels, TRANSPORT_ICON, fmtSeconds, rulesText, drawZone, zoneBounds, errorContext,
 } from './common.js';
 import { t, lang, applyI18n, langButton, langHeader } from './i18n.js';
 
@@ -105,7 +105,8 @@ async function init() {
   navigator.getBattery?.().then((b) => { battery = b; }).catch(() => {});
   cfg = await getConfig();
   map = await createMap('map');
-  for (const k of ['zone', 'meeting', 'pings', 'hunters', 'own']) layers[k] = L.layerGroup().addTo(map);
+  for (const k of ['zone', 'meeting', 'pings', 'hunters', 'own', 'fx']) layers[k] = L.layerGroup().addTo(map);
+  map.on('zoomend', scheduleDeclutter);
   // Das Bedienfeld unten ändert seine Höhe – Leaflet muss die neue Kartengröße kennen.
   // Solange niemand die Karte selbst bewegt hat, wird der automatische Ausschnitt neu berechnet.
   const container = map.getContainer();
@@ -183,7 +184,10 @@ async function requestWakeLock() {
 
 function onPosition(p) {
   const firstFix = !lastPos;
-  lastPos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: Date.now() };
+  lastPos = {
+    lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: Date.now(),
+    heading: p.coords.heading, speed: p.coords.speed, // Laufrichtung – liefert das GPS nur in Bewegung
+  };
   geoError = null;
   drawOwn();
   // eigene Position mit in den Ping- bzw. Treffpunkt-Ausschnitt nehmen
@@ -363,6 +367,8 @@ function detectChanges() {
         showBanner('ping', t(wasArmed && !me.blockArmed ? 'banner.pingBlocked' : 'banner.pingRunner', { kind }));
         fitToPing();
       }
+      const blocked = wasArmed && !me.blockArmed;
+      setTimeout(() => pingEffect(blocked), 80); // nach dem Neuzeichnen der Karte
       vibrate([200, 100, 200]);
       sound('ping');
     }
@@ -576,14 +582,16 @@ function buildContent() {
         'aria-pressed': cur?.mode === mode ? 'true' : 'false',
       }, el('span', { 'aria-hidden': 'true', text: TRANSPORT_ICON[mode] }), ` ${transportLabel(mode)}`)))));
   }
-  const row = el('div', { class: 'row' },
-    el('button', { class: 'btn', type: 'button', onclick: centerOnMe, text: t('btn.center') }),
-    el('button', { class: 'btn', type: 'button', onclick: showRules, text: t('btn.rules') }),
-    el('button', { class: 'btn', type: 'button', onclick: toggleSound, text: soundOn ? t('btn.soundOn') : t('btn.soundOff') }),
-    el('button', { class: `btn ${sunOn ? 'primary' : ''}`, type: 'button', onclick: toggleSun, 'aria-pressed': String(sunOn), text: t('btn.sun') }));
-  if (room.status !== 'lobby') row.append(el('button', { class: 'btn', type: 'button', onclick: openCheck, text: t('btn.check') }));
-  if (room.status === 'lobby') row.append(el('button', { class: 'btn', type: 'button', onclick: rename, text: t('btn.rename') }));
-  actions.append(row);
+  // Symbolleiste: seltene Funktionen klein, damit Karte und die großen Spielknöpfe Platz haben
+  const tool = (icon, label, onclick, pressed) => el('button', {
+    class: `tool${pressed ? ' on' : ''}`, type: 'button', onclick, title: label, 'aria-pressed': pressed == null ? null : String(pressed),
+  }, el('span', { class: 'tool-icon', 'aria-hidden': 'true', text: icon }), el('span', { class: 'tool-label', text: label }));
+  actions.append(el('div', { class: 'toolbar' },
+    tool('🎯', t('tool.center'), centerOnMe),
+    tool('📋', t('tool.rules'), showRules),
+    tool(soundOn ? '🔔' : '🔕', t(soundOn ? 'tool.soundOn' : 'tool.soundOff'), toggleSound, soundOn),
+    tool('☀️', t('tool.sun'), toggleSun, sunOn),
+    room.status === 'lobby' ? tool('✏️', t('tool.rename'), rename) : tool('🩺', t('tool.check'), openCheck)));
   box.append(actions);
 
   if (room.meetingPoint && room.status !== 'ended') box.append(meetingBlock(room.meetingPoint, false));
@@ -1106,7 +1114,7 @@ function drawMap() {
   // Pings nur neu zeichnen, wenn ein neuer dazukommt (spart Akku bei jeder Abfrage)
   const pings = S.pings || [];
   const scale = sunOn ? 1.35 : 1;
-  const hunterColor = cssVar('--hunter'), runnerColor = cssVar('--runner');
+  const hunterColor = cssVar('--hunter-map'), runnerColor = cssVar('--runner');
   const pKey = pings.map((p) => p.id).join();
   if (pKey !== pingsKey) {
     pingsKey = pKey;
@@ -1127,6 +1135,7 @@ function drawMap() {
           label,
         }).addTo(layers.pings);
         if (latest) ageLabels.pings.push({ m, name: pos.name, at: ping.at, text: label });
+        else m.bindTooltip(() => pingLabel(pos.name, ping.at), { direction: 'top', offset: [0, -5 * scale], className: 'map-label small' });
       }
     });
     for (const pts of Object.values(trails)) {
@@ -1151,6 +1160,40 @@ function drawMap() {
   }
   drawOwn();
   initialView();
+  scheduleDeclutter();
+}
+
+// Kartenschilder entzerren: wichtigere Schilder zuerst (Gejagte beim Ping, dann Jäger, dann Treffpunkt);
+// der eigene Punkt wird nie verdeckt
+let declutterQueued = false;
+function scheduleDeclutter() {
+  if (declutterQueued) return;
+  declutterQueued = true;
+  requestAnimationFrame(() => {
+    declutterQueued = false;
+    if (map) declutterLabels([layers.pings, layers.hunters, layers.meeting], [ownDot?.getElement()?.querySelector('.me-dot')], scheduleDeclutter);
+  });
+}
+
+// Ping-Moment sichtbar machen: Radar-Ringe über den neuen Positionen (bei Gejagten auch über dem eigenen Punkt –
+// „jetzt sehen dich die Jäger“, außer der Block hat gegriffen)
+function pingEffect(blocked) {
+  if (!map || !S) return;
+  const pts = [];
+  if (S.me.role === 'hunter') {
+    for (const p of S.pings?.at(-1)?.positions || []) if (p.lat != null) pts.push([p.lat, p.lng, cssVar('--runner')]);
+  } else if (S.me.role === 'runner') {
+    for (const h of S.huntersAtPing?.hunters || []) pts.push([h.lat, h.lng, cssVar('--hunter-map')]);
+    if (lastPos && !blocked) pts.push([lastPos.lat, lastPos.lng, cssVar('--runner')]);
+  }
+  for (const [lat, lng, c] of pts) {
+    const ring = `<span class="ping-ring" style="--c:${c}"></span><span class="ping-ring r2" style="--c:${c}"></span>`;
+    const m = L.marker([lat, lng], {
+      icon: L.divIcon({ className: 'ping-fx', html: ring, iconSize: [20, 20], iconAnchor: [10, 10] }),
+      interactive: false, keyboard: false,
+    }).addTo(layers.fx);
+    setTimeout(() => layers.fx.removeLayer(m), 5200);
+  }
 }
 
 // Erster Kartenausschnitt: Jäger sehen den letzten Ping, sonst das Spielfeld, sonst sich selbst
@@ -1173,24 +1216,34 @@ function initialView() {
   centered = true;
 }
 
-// Eigene Position: Das GPS meldet sich bis zu jede Sekunde – die Marker werden nur verschoben, nicht neu gebaut
+// Eigene Position: Punkt mit weißem Rand und Pfeil in Laufrichtung – ohne Schild, das spart Platz auf der Karte.
+// Das GPS meldet sich bis zu jede Sekunde – die Marker werden nur verschoben, nicht neu gebaut.
 let ownDot = null;
 let ownAcc = null;
 let ownStyleKey = '';
 function drawOwn() {
   if (!map || !lastPos) return;
-  const color = S?.me.role === 'hunter' ? cssVar('--hunter') : S?.me.role === 'runner' ? cssVar('--runner') : '#666';
-  const styleKey = `${color}|${sunOn}`;
+  const role = S?.me.role === 'hunter' || S?.me.role === 'runner' ? S.me.role : '';
+  const color = role === 'hunter' ? cssVar('--hunter-map') : role === 'runner' ? cssVar('--runner') : '#666';
+  const styleKey = `${role}|${sunOn}`;
+  const ll = [lastPos.lat, lastPos.lng];
   if (styleKey !== ownStyleKey) {
     ownStyleKey = styleKey;
     layers.own.clearLayers();
-    ownAcc = L.circle([lastPos.lat, lastPos.lng], { radius: lastPos.acc, color, weight: 1, fillOpacity: 0.08 });
-    ownDot = L.circleMarker([lastPos.lat, lastPos.lng], { radius: sunOn ? 12 : 9, color: '#fff', weight: 3, fillColor: color, fillOpacity: 1 })
-      .bindTooltip(t('map.you'), { permanent: true, direction: 'right', offset: [10, 0], className: 'map-label' })
-      .addTo(layers.own);
+    ownAcc = L.circle(ll, { radius: lastPos.acc, color, weight: 1, fillOpacity: 0.08, interactive: false });
+    ownDot = L.marker(ll, {
+      icon: L.divIcon({
+        className: 'me-icon', iconSize: [24, 24], iconAnchor: [12, 12],
+        html: `<div class="me-marker ${role} no-heading"><div class="me-halo"></div><div class="me-dir"></div><div class="me-dot"></div></div>`,
+      }),
+      title: t('map.you'), alt: t('map.you'), keyboard: false, zIndexOffset: 1000,
+    }).addTo(layers.own);
   }
-  const ll = [lastPos.lat, lastPos.lng];
   ownDot.setLatLng(ll);
+  const icon = ownDot.getElement()?.querySelector('.me-marker');
+  const moving = Number.isFinite(lastPos.heading) && lastPos.speed > 0.6;
+  icon?.classList.toggle('no-heading', !moving);
+  if (moving) icon?.style.setProperty('--heading', `${Math.round(lastPos.heading)}deg`);
   ownAcc.setLatLng(ll).setRadius(lastPos.acc);
   if (lastPos.acc >= 500) layers.own.removeLayer(ownAcc);
   else if (!layers.own.hasLayer(ownAcc)) ownAcc.addTo(layers.own).bringToBack();

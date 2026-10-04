@@ -30,6 +30,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | Regeln | „📋 Regeln“ auf jedem Handy – Standardregeln aus den Einstellungen oder eigener Text |
 | Töne | bei Ping, Vorwarnung, Start, Gefangen, Nachricht, Endspurt; pro Handy abschaltbar |
 | Sprachen | Spielerseiten auf **Deutsch und Englisch** (automatisch nach Handy-Sprache, umschaltbar) |
+| Karte | Jäger **orange**, Gejagte blau – **Rot nur für Notfälle**; Schilder weichen einander aus (verdeckte zeigt ein Antippen), eigener Punkt mit Pfeil in Laufrichtung, **Radar-Ringe** beim Ping; Symbolleiste für Zentrieren, Regeln, Ton, Sonne, Check |
 | **Sonnenmodus** | „☀️ Sonnenmodus“ auf dem Handy: maximaler Kontrast, größere Schrift und Kartenbeschriftung für draußen |
 
 **Sicherheit & Aufsicht**
@@ -41,7 +42,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 | **Handy-Check** | prüft vor dem Start Standort, Display-an, Ton, Akku, Vibration mit Tipps für iPhone/Android; Ergebnis in der Geräte-Liste („Check ✓/⚠“) |
 | **Alarm-Absicherung** | solange ein Spiel läuft, hält die Admin-Seite das Display an; rotes Banner „Keine Verbindung – Alarme kommen nicht an“, wenn das Handy der Spielleitung kein Netz hat; Knopf „🔊 Alarmton testen“ |
 | **Einsatz-Ansicht** | im laufenden Spiel auf dem Handy automatisch: nur Warnungen, Zähler, Karte, Sofort-Ping/Treffpunkt/Beenden, Geräte (Probleme zuerst) und Nachricht; „Alles anzeigen“ schaltet um |
-| Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit, Akku |
+| Live-Übersicht | alle Geräte auf der Karte, letztes Signal, GPS-Genauigkeit; Geräte-Liste mit **Ampelpunkt** und **Akku-Symbol**; am Computer **Reiter** (Spiel · Geräte · Einstellungen · Auswertung), die Karte bleibt rechts |
 | Nachricht an alle | z. B. Spielabbruch; Schnellknopf „Alle zum Treffpunkt rufen“ |
 | Wiederbeitritt | QR-Code pro Gerät, falls ein Handy ausfällt |
 | Schutz vor Versehen | „Spiel verlassen“, „Aus dem Raum entfernen“, „Raum löschen“ nur durch 2 s Gedrückthalten; „Alle Geräte entfernen“ (nicht im laufenden Spiel) durch 3 s |

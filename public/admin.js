@@ -1,7 +1,7 @@
 import {
-  $, api, el, fmtCountdown, fmtAge, fmtTime, ROLE_LABEL, STATUS_LABEL, getConfig, createMap, labeledMarker, meetingMarker,
+  $, api, el, store, fmtCountdown, fmtAge, fmtTime, ROLE_LABEL, STATUS_LABEL, getConfig, createMap, labeledMarker, meetingMarker,
   cssVar, holdButton, isHolding, playSound, audioReady, unlockAudio, audioIgnoresSilentSwitch, SOUNDS, routeUrl, TRANSPORT, TRANSPORT_ICON, defaultRules, rulesText,
-  drawZone, zoneBounds, errorContext,
+  drawZone, zoneBounds, errorContext, declutterLabels,
 } from './common.js';
 
 errorContext.role = 'admin';
@@ -376,7 +376,7 @@ function focusAlert(a) {
 
 async function openList() {
   roomId = null;
-  document.body.classList.remove('mission');
+  document.body.classList.remove('mission', 'tabs');
   show('listView');
   updateTitle();
   loadSetupCheck();
@@ -536,6 +536,7 @@ async function openRoom(id) {
     map = await createMap('adminMap');
     for (const k of ['zone', 'preview', 'meeting', 'pings', 'players']) layers[k] = L.layerGroup().addTo(map);
     map.on('click', onMapClick);
+    map.on('zoomend', scheduleDeclutter);
   }
   map.invalidateSize();
   await loadRoom();
@@ -574,9 +575,27 @@ function setRoom(room) {
 
 const missionActive = () => !!R && R.status === 'running' && (viewPref === 'mission' || (viewPref === null && narrow.matches));
 
+// Reiter am Desktop: Spiel · Geräte · Einstellungen · Auswertung – die Karte bleibt rechts sichtbar.
+// Am Handy (CSS) und in der Einsatz-Ansicht steht alles untereinander.
+const TABS = ['spiel', 'geraete', 'einstellungen', 'auswertung'];
+let roomTab = TABS.includes(store.get('mh_admin_tab')) ? store.get('mh_admin_tab') : 'spiel';
+function setTab(name) {
+  if (!TABS.includes(name) || (name === 'einstellungen' && !isAdmin())) name = 'spiel';
+  roomTab = name;
+  store.set('mh_admin_tab', name);
+  for (const b of document.querySelectorAll('.room-tab')) {
+    b.classList.toggle('on', b.dataset.tab === name);
+    b.setAttribute('aria-selected', String(b.dataset.tab === name));
+  }
+  for (const c of document.querySelectorAll('.room-layout .col.main > [data-tab]')) c.classList.toggle('tab-on', c.dataset.tab === name);
+}
+for (const b of document.querySelectorAll('.room-tab')) b.addEventListener('click', () => setTab(b.dataset.tab));
+
 function renderView() {
   const mission = missionActive();
   document.body.classList.toggle('mission', mission);
+  document.body.classList.toggle('tabs', !mission);
+  setTab(roomTab);
   const btn = $('#viewToggle');
   btn.classList.toggle('hidden', R?.status !== 'running');
   btn.textContent = mission ? 'Alles anzeigen' : 'Einsatz-Ansicht';
@@ -804,6 +823,10 @@ function renderPlayers() {
   const players = [...R.players].sort((a, b) => (b.emergency - a.emergency) || (trouble(b) - trouble(a))
     || (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || a.name.localeCompare(b.name, 'de'));
   $('#pTitle').textContent = `Geräte (${players.length})`;
+  const tabCount = $('#tabCountPlayers');
+  const problems = players.filter((p) => ampel(p, now())[0] === 'amber').length;
+  tabCount.textContent = players.some((p) => p.emergency) ? `${players.length} · 🚨` : problems ? `${players.length} · ⚠ ${problems}` : String(players.length);
+  tabCount.className = `tab-count${players.some((p) => p.emergency) ? ' danger' : problems ? ' warn' : ''}`;
   $('#drawN').max = Math.max(1, players.length - 1);
   $('#drawForm').classList.toggle('hidden', R.status !== 'lobby');
   // Nicht neu zeichnen, während eine Rollen-Auswahl offen ist oder gerade jemand auf die Liste tippt –
@@ -849,7 +872,6 @@ function playerRow(p, t) {
   if (p.outside && R.status === 'running') status.push(el('span', { class: 'badge danger', text: 'außerhalb' }));
   if (p.warnings?.some((w) => w.type === 'signal')) status.push(el('span', { class: 'badge warn', text: '⚠ kein Signal' }));
   if (p.warnings?.some((w) => w.type === 'join' && !w.acked)) status.push(el('span', { class: 'badge warn', text: '⚠ neu' }));
-  if (p.warnings?.some((w) => w.type === 'battery')) status.push(el('span', { class: 'badge warn', text: '🪫 Akku' }));
   if (p.geoError) status.push(el('span', { class: 'badge warn', text: p.geoError }));
   if (p.blockArmed) status.push(el('span', { class: 'badge', text: '🛡 blockt nächsten Ping' }));
   // Handy-Check: in der Lobby immer, im Spiel nur wenn etwas fehlt
@@ -862,13 +884,14 @@ function playerRow(p, t) {
   if (isAdmin() && running && p.caughtAt) actions.push(btn('Zurück', () => releaseCaught(p), 'Zurück zu Gejagt'));
   actions.push(btn('⋯', () => showPlayerDialog(p.id), 'Weitere Aktionen'));
 
+  const [level, why] = ampel(p, t);
   return el('tr', { class: stale ? 'stale' : '' },
-    el('td', { class: 'name', title: p.name }, el('strong', { text: p.name })),
+    el('td', { class: 'name', title: `${p.name} – ${why}` }, el('span', { class: `dot ${level}`, role: 'img', 'aria-label': why }), el('strong', { text: p.name })),
     el('td', { class: 'role' }, roleCell),
     el('td', { class: 'status' }, el('div', { class: 'row' }, status)),
     el('td', { class: 'seen small' },
       el('div', { class: 'age', text: signalText(p, t) }),
-      el('div', { class: 'batt', text: batteryText(p) })),
+      el('div', { class: 'batt' }, batteryIcon(p), batteryText(p).replace('Akku ', ''))),
     el('td', { class: 'actions' }, actions));
 }
 
@@ -894,6 +917,28 @@ function signalText(p, t) {
 }
 
 const batteryText = (p) => (p.battery != null ? `Akku ${Math.round(p.battery * 100)} %${p.charging ? ' ⚡' : ''}` : 'Akku –');
+
+// Akku als Symbol: Füllstand grün, unter 30 % gelb, unter 15 % rot (iPhones melden keinen Akkustand)
+function batteryIcon(p) {
+  if (p.battery == null) return null;
+  const pct = Math.round(p.battery * 100);
+  const icon = el('span', { class: `batt-icon${pct < 15 ? ' low' : pct < 30 ? ' mid' : ''}`, 'aria-hidden': 'true' }, el('span'));
+  icon.style.setProperty('--lvl', String(Math.max(0.04, p.battery)));
+  return icon;
+}
+
+// Ampel je Gerät: rot = Notfall, gelb = Warnung/kein Signal/außerhalb/Problem, grün = alles gut, grau = noch nie gesendet
+function ampel(p, t) {
+  if (p.emergency) return ['red', 'Notfall'];
+  const running = R.status === 'running';
+  if (p.warnings?.some((w) => w.type !== 'join' || !w.acked)) return ['amber', 'Warnung offen'];
+  if (!p.lastSeen) return running ? ['amber', 'hat noch nie gesendet'] : ['grey', 'noch kein Signal'];
+  if (running && p.outside) return ['amber', 'außerhalb des Spielfelds'];
+  if (p.geoError) return ['amber', p.geoError];
+  if (t - p.lastSeen > 60000) return ['amber', 'kein aktuelles Signal'];
+  if (R.status === 'lobby' && !p.bot && p.check && !checkOk(p.check)) return ['amber', 'Handy-Check unvollständig'];
+  return ['green', 'alles in Ordnung'];
+}
 
 // Geräte-Menü: seltenere Aktionen, damit die Tabelle schmal bleibt
 function showPlayerDialog(pid) {
@@ -1225,7 +1270,7 @@ function renderEvents() {
 
 function renderMap() {
   if (!map || !R) return;
-  const hunter = cssVar('--hunter'), runner = cssVar('--runner'), neutral = cssVar('--caught'), primary = cssVar('--primary');
+  const hunter = cssVar('--hunter-map'), runner = cssVar('--runner'), neutral = cssVar('--caught'), primary = cssVar('--primary');
   const t = now();
 
   layers.preview.clearLayers();
@@ -1263,7 +1308,7 @@ function renderMap() {
   }
 
   layers.players.clearLayers();
-  for (const p of R.players) {
+  for (const p of [...R.players].sort((a, b) => b.emergency - a.emergency)) {
     if (!p.pos) continue;
     const stale = !p.lastSeen || t - p.lastSeen > 60000;
     const color = p.role === 'hunter' ? hunter : p.role === 'runner' ? runner : neutral;
@@ -1276,12 +1321,24 @@ function renderMap() {
     }).addTo(layers.players);
   }
 
+  scheduleDeclutter();
   if (pendingFocus) {
     map.setView(pendingFocus, 17);
     pendingFocus = null;
     fitted = true;
   }
   if (!fitted) fitted = fitAll();
+}
+
+// Kartenschilder entzerren – Notfälle zuerst (werden in renderMap zuerst gezeichnet), dann Treffpunkt
+let declutterQueued = false;
+function scheduleDeclutter() {
+  if (declutterQueued) return;
+  declutterQueued = true;
+  requestAnimationFrame(() => {
+    declutterQueued = false;
+    if (map && !$('#roomView').classList.contains('hidden')) declutterLabels([layers.players, layers.meeting], [], scheduleDeclutter);
+  });
 }
 
 function fitAll() {

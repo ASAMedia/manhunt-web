@@ -94,7 +94,7 @@ export default async function einsatz({ base, adminPass, supPass, check, section
   const { r: fr2, t: ft2 } = await mk('Funkloch 2', {});
   await req('POST', `/api/admin/rooms/${fr2.id}/start`, undefined, A);
   const future = await req('POST', '/api/play/caught', { at: Date.now() + 3600e3 }, { token: ft2.Runa });
-  check(future.status === 200 && future.data.me.caughtAt <= Date.now(), 'Zeitpunkt in der Zukunft → Ankunftszeit', future.data);
+  check(future.status === 200 && future.data.me.caughtAt <= Date.now() + 50, 'Zeitpunkt in der Zukunft → Ankunftszeit', { status: future.status, me: future.data.me, now: Date.now() });
 
   section('Review: Einstellungen im laufenden Spiel, doppelt nachgesendete Meldungen');
   const { r: sr, t: st2 } = await mk('Review', { zone: { lat: 52.52, lng: 13.40, radius: 3000 }, shrinkEnabled: true, shrinkFinalRadius: 400, durationMin: 90, blocksPerRunner: 2 });
@@ -111,7 +111,7 @@ export default async function einsatz({ base, adminPass, supPass, check, section
   check(tooShort2.status === 409, 'dann weiter kürzen → abgelehnt statt sofortigem Spielende');
   check((await req('GET', `/api/admin/rooms/${sr.id}`, undefined, A)).data.status === 'running', 'Spiel läuft weiter');
   // Notruf: Antwort ging verloren, inzwischen erledigt → Nachsenden löst keinen zweiten Alarm aus
-  const tap = Date.now() - 1000;
+  const tap = Date.now() - 5000; // deutlich vor dem nächsten Notruf – Prozess-Uhren weichen unter Windows um Millisekunden ab
   await req('POST', '/api/play/sos', { at: tap }, { token: st2.Jens });
   const e1 = (await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.find((e) => e.roomId === sr.id);
   await req('PATCH', `/api/admin/rooms/${sr.id}/emergencies/${e1.id}`, { resolve: true }, A);
@@ -119,7 +119,7 @@ export default async function einsatz({ base, adminPass, supPass, check, section
   check(!(await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.some((e) => e.roomId === sr.id), 'doppelt nachgesendeter Notruf → kein zweiter Alarm');
   await req('POST', '/api/play/sos', { at: Date.now() }, { token: st2.Jens });
   const e2 = (await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.find((e) => e.roomId === sr.id);
-  check(!!e2 && !e2.receivedAt, 'neuer Notruf danach kommt normal an');
+  check(!!e2 && !e2.receivedAt, 'neuer Notruf danach kommt normal an', { e1, e2, ev: (await req('GET', `/api/admin/rooms/${sr.id}`, undefined, A)).data.events.slice(-6), now: Date.now() });
   await req('PATCH', `/api/admin/rooms/${sr.id}/emergencies/${e2.id}`, { resolve: true }, A);
   await req('POST', '/api/play/sos', { at: Date.now() - 5 * 60e3 }, { token: st2.Runa });
   const e3 = (await req('GET', '/api/admin/alerts', undefined, A)).data.emergencies.find((e) => e.roomId === sr.id && e.name === 'Runa');

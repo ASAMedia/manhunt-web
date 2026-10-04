@@ -204,6 +204,47 @@ export function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Kartenschilder entzerren: Schilder in der Reihenfolge der Gruppen (wichtigste zuerst) platzieren. Würde ein Schild
+// ein anderes (oder einen der `avoid`-Punkte) verdecken, weicht es auf eine andere Seite aus; passt keine, wird es
+// ausgeblendet – Antippen des Punkts zeigt es kurz an, danach wird neu sortiert (`again`).
+const LABEL_SIDES = ['top', 'right', 'left', 'bottom'];
+const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+let peekTimer = null;
+export function declutterLabels(groups, avoid = [], again = () => {}) {
+  const placed = avoid.filter(Boolean).map((e) => e.getBoundingClientRect());
+  for (const group of groups) {
+    group.eachLayer((m) => {
+      const tip = m.getTooltip?.();
+      const node = tip?.options.permanent && tip.getElement();
+      if (!node) return;
+      node.classList.remove('label-hidden');
+      const r = m.getRadius?.() ?? 8;
+      const fits = LABEL_SIDES.some((side) => {
+        tip.options.direction = side;
+        tip.options.offset = side === 'top' ? [0, -r] : side === 'bottom' ? [0, r] : side === 'right' ? [r, 0] : [-r, 0];
+        tip.update();
+        const box = node.getBoundingClientRect();
+        if (placed.some((p) => overlaps(p, box))) return false;
+        placed.push(box);
+        return true;
+      });
+      if (fits) return;
+      tip.options.direction = 'top';
+      tip.options.offset = [0, -r];
+      tip.update();
+      node.classList.add('label-hidden');
+      if (!m.peekBound) {
+        m.peekBound = true;
+        m.on('click', () => {
+          m.getTooltip()?.getElement()?.classList.remove('label-hidden');
+          clearTimeout(peekTimer);
+          peekTimer = setTimeout(again, 4000);
+        });
+      }
+    });
+  }
+}
+
 export const meetingMarker = (mp) => labeledMarker([mp.lat, mp.lng], {
   color: cssVar('--ok'), radius: 10, label: `🏁 ${mp.label}`, className: 'meeting',
 });

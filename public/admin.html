@@ -85,13 +85,20 @@
 
       <div class="room-layout">
         <div class="col main">
-          <div class="card stack first">
+          <!-- Reiter am Desktop – am Handy steht alles untereinander -->
+          <nav class="room-tabs" role="tablist" aria-label="Bereiche des Raums">
+            <button class="room-tab" type="button" role="tab" data-tab="spiel">Spiel</button>
+            <button class="room-tab" type="button" role="tab" data-tab="geraete">Geräte <span id="tabCountPlayers" class="tab-count">0</span></button>
+            <button class="room-tab admin-only" type="button" role="tab" data-tab="einstellungen">Einstellungen</button>
+            <button class="room-tab" type="button" role="tab" data-tab="auswertung">Auswertung &amp; Verlauf</button>
+          </nav>
+          <div class="card stack first" data-tab="spiel">
             <div id="controls" class="row"></div>
             <div id="result"></div>
             <p id="autoDel" class="small muted mission-hide"></p>
           </div>
 
-          <div class="card stack mission-hide">
+          <div class="card stack mission-hide" data-tab="spiel">
             <h2>Einladen</h2>
             <div class="invite">
               <img id="qr" alt="QR-Code zum Beitreten" title="Groß anzeigen">
@@ -110,7 +117,7 @@
             <div id="urlWarn"></div>
           </div>
 
-          <div class="card stack">
+          <div class="card stack" data-tab="geraete">
             <div class="row" style="justify-content:space-between">
               <h2 id="pTitle" style="margin:0">Geräte</h2>
               <form id="drawForm" class="row admin-only">
@@ -139,7 +146,7 @@
             </div>
           </div>
 
-          <div class="card stack admin-only mission-hide">
+          <div class="card stack admin-only mission-hide" data-tab="einstellungen">
             <h2>Einstellungen</h2>
             <form id="settingsForm" class="stack">
               <div class="settings-grid">
@@ -191,7 +198,7 @@
             </form>
           </div>
 
-          <div class="card stack">
+          <div class="card stack" data-tab="spiel">
             <h2>Nachricht an alle</h2>
             <form id="msgForm" class="stack">
               <textarea id="msgText" rows="2" maxlength="300" placeholder="z. B. Spielabbruch – alle sofort zum Treffpunkt!"></textarea>
@@ -204,7 +211,7 @@
             <div id="msgCurrent" class="small muted"></div>
           </div>
 
-          <div class="card stack mission-hide">
+          <div class="card stack mission-hide" data-tab="auswertung">
             <h2>Auswertung</h2>
             <div id="rounds"></div>
             <div class="row">
@@ -214,7 +221,7 @@
             </div>
           </div>
 
-          <div class="card mission-hide">
+          <div class="card mission-hide" data-tab="auswertung">
             <h2>Verlauf</h2>
             <ul id="events" class="list events"></ul>
           </div>
@@ -223,7 +230,7 @@
         <div class="col map-col">
           <div id="adminMap"></div>
           <div class="row small muted" style="margin-top:.5rem;justify-content:space-between">
-            <span><span class="badge hunter">Jäger</span> <span class="badge runner">Gejagt</span> blass = kein aktuelles Signal · Ringe = letzter Ping · 🏁 = Treffpunkt</span>
+            <span><span class="badge hunter">Jäger</span> <span class="badge runner">Gejagt</span> <span class="badge danger">Notfall</span> blass = kein aktuelles Signal · Ringe = letzter Ping · 🏁 = Treffpunkt</span>
             <button id="fitAll" class="btn sm" type="button">Alle anzeigen</button>
           </div>
         </div>

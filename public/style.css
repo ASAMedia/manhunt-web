@@ -10,13 +10,16 @@
   --primary: #1f6feb;
   --primary-text: #ffffff;
   --link: #1a5fd0;
-  --hunter: #d13b3b;
+  --hunter: #c2410c;      /* Jäger: Orange – Rot bleibt Notfall, SOS und „Gefangen“ vorbehalten */
+  --hunter-map: #ea580c;  /* Jäger auf der Karte: etwas heller, hebt sich von Notfall-Rot ab */
   --runner: #1f6feb;
   --caught: #6b7482;
   --ok: #2e7d32;
   --warn: #8a5700;
   --warn-bg: #fff3dc;
   --warn-solid: #9a6200;
+  --amber: #ffbf1f;       /* Warnungen als Fläche: klares Bernstein mit dunkler Schrift */
+  --amber-text: #241800;
   --danger: #c62828;
   --danger-bg: #fdeaea;
   --danger-solid: #c62828;
@@ -561,7 +564,8 @@ body.print-page { background: #fff; color: #111; color-scheme: light; }
   --border: #000000;
   --primary: #0a47b8;
   --link: #0a47b8;
-  --hunter: #b00000;
+  --hunter: #9a3412;
+  --hunter-map: #c2410c;
   --runner: #0a47b8;
   --caught: #3d3d3d;
   --ok: #1b5e20;
@@ -697,3 +701,114 @@ body.mission .admin-head h1 { font-size: 1.25rem; }
 .time-btns { display: inline-flex; gap: .5rem; }
 body.mission .time-btns { flex: 1 1 auto; }
 body.mission .time-btns .btn { flex: 1 1 0; }
+
+/* ---------------------------------------------------------------------------
+   Design-Runde: Symbolleiste, eigener Standort, Radar-Ring beim Ping, Kartenschilder
+   --------------------------------------------------------------------------- */
+
+/* Symbolleiste der Spielerseite: fünf gleich breite Felder mit Symbol und kurzem Text */
+.toolbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .4rem; }
+.tool {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem;
+  min-height: 3.4rem; padding: .35rem .15rem; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text); cursor: pointer; font-size: .75rem; font-weight: 600; line-height: 1.15;
+}
+.tool:hover { background: var(--surface-2); }
+.tool.on { background: var(--result-bg); border-color: var(--primary); }
+.tool .tool-icon { font-size: 1.3rem; line-height: 1; }
+.tool .tool-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-theme="sun"] .tool { border: 2px solid var(--border); font-size: .85rem; }
+
+/* Eigener Standort: Punkt mit weißem Rand, sanftem Puls und Pfeil in Laufrichtung (kein Schild) */
+.me-icon { overflow: visible; }
+.me-marker { position: relative; width: 24px; height: 24px; --me: #666; }
+.me-marker.hunter { --me: var(--hunter-map); }
+.me-marker.runner { --me: var(--runner); }
+.me-dot {
+  position: absolute; inset: 3px; border-radius: 50%; background: var(--me); border: 3px solid #fff;
+  box-shadow: 0 0 0 1.5px rgb(0 0 0 / .35), 0 2px 6px rgb(0 0 0 / .35);
+}
+.me-halo { position: absolute; inset: -8px; border-radius: 50%; background: var(--me); opacity: .18; }
+.me-dir { position: absolute; inset: 0; transform: rotate(var(--heading, 0deg)); }
+.me-dir::before {
+  content: ''; position: absolute; left: 50%; top: -11px; margin-left: -7px;
+  border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 11px solid var(--me);
+  filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff);
+}
+.me-marker.no-heading .me-dir { display: none; }
+:root[data-theme="sun"] .me-marker { transform: scale(1.3); }
+@media (prefers-reduced-motion: no-preference) {
+  .me-halo { animation: me-pulse 2.4s ease-out infinite; }
+}
+@keyframes me-pulse { 0% { transform: scale(.6); opacity: .35; } 100% { transform: scale(1.6); opacity: 0; } }
+
+/* Radar-Ring beim Ping über den neuen Positionen */
+.ping-fx { overflow: visible; pointer-events: none; }
+.ping-ring {
+  position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%;
+  border: 3px solid var(--c, #1f6feb); opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ping-ring { animation: ping-ring 1.4s ease-out 3; }
+  .ping-ring.r2 { animation-delay: .45s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ping-ring { opacity: .9; transform: scale(2); }
+  .ping-ring.r2 { display: none; }
+}
+@keyframes ping-ring { 0% { transform: scale(.5); opacity: .95; } 100% { transform: scale(4.5); opacity: 0; } }
+
+/* Kartenschilder: verdeckte Schilder ausblenden (Punkt antippen zeigt sie), Schilder früherer Pings klein */
+.leaflet-tooltip.map-label.label-hidden { display: none; }
+.leaflet-tooltip.map-label.small { font-size: 11px; font-weight: 500; padding: 0 5px; }
+
+/* Warnungen: klares Bernstein mit dunkler Schrift (Notfälle bleiben rot) */
+.alert-bar .alert-item.warn { background: var(--amber); color: var(--amber-text); }
+.alert-bar .alert-item.warn .btn { background: rgb(0 0 0 / .06); border-color: rgb(0 0 0 / .35); color: var(--amber-text); }
+.alert-bar .alert-item.warn .btn:hover { background: rgb(0 0 0 / .12); }
+.banner.message { background: var(--amber); color: var(--amber-text); }
+.banner.message .btn { background: rgb(0 0 0 / .08); }
+
+/* Geräte-Liste: Ampelpunkt und Akku-Symbol */
+.dot {
+  display: inline-block; flex: none; width: .75rem; height: .75rem; border-radius: 50%; margin-right: .45rem; vertical-align: -.05em;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px rgb(0 0 0 / .18);
+}
+.dot.green { background: var(--ok); }
+.dot.amber { background: var(--amber); }
+.dot.red { background: var(--danger-solid); }
+.dot.grey { background: var(--caught); }
+@media (prefers-reduced-motion: no-preference) {
+  .dot.red { animation: dot-pulse 1.2s ease-in-out infinite; }
+}
+@keyframes dot-pulse { 50% { box-shadow: 0 0 0 2px var(--surface), 0 0 0 6px rgb(198 40 40 / .35); } }
+.batt-icon {
+  display: inline-block; position: relative; width: 1.45rem; height: .72rem; margin-right: .45rem; vertical-align: -.08em;
+  border: 1.5px solid currentColor; border-radius: 3px; color: var(--muted);
+}
+.batt-icon::after {
+  content: ''; position: absolute; right: -4px; top: 50%; width: 2.5px; height: .32rem; transform: translateY(-50%);
+  background: currentColor; border-radius: 0 1px 1px 0;
+}
+.batt-icon > span { position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; width: calc((100% - 3px) * var(--lvl, 0)); border-radius: 1px; background: var(--ok); }
+.batt-icon.mid > span { background: var(--amber); }
+.batt-icon.low > span { background: var(--danger-solid); }
+.batt-icon.low { color: var(--danger); }
+
+/* Raumansicht am Desktop: Reiter statt einer langen Seite (die Karte bleibt rechts) */
+.room-tabs { display: none; }
+@media (min-width: 1000px) {
+  body.tabs .room-tabs {
+    display: flex; gap: .15rem; flex-wrap: wrap; border-bottom: 1px solid var(--border);
+  }
+  body.tabs .room-layout .col.main > [data-tab]:not(.tab-on) { display: none; }
+}
+.room-tab {
+  border: 0; border-bottom: 3px solid transparent; background: none; padding: .55rem .9rem .5rem; margin-bottom: -1px;
+  font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
+}
+.room-tab:hover { color: var(--text); }
+.room-tab.on { color: var(--text); border-bottom-color: var(--primary); }
+.room-tab .tab-count { font-size: .75rem; font-weight: 700; padding: .05rem .4rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.room-tab .tab-count.warn { background: var(--amber); color: var(--amber-text); }
+.room-tab .tab-count.danger { background: var(--danger-solid); color: #fff; }
