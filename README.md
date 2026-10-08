@@ -16,7 +16,7 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 |---|---|
 | Räume & Beitritt | beliebig viele Räume; Beitritt per QR-Code oder 6-stelligem Code (große Code-Eingabe, Schritte Code → Name → Loslegen); Beitritt schließbar |
 | Rollen | pro Gerät setzen oder „N Gejagte auslosen“; wer später beitritt, wird automatisch Jäger |
-| Pings | frei wählbares Intervall (1–180 min), erster Ping am Ende des Vorsprungs; **Vorwarnung** kurz vorher. Beim Ping sehen die Jäger die Gejagten – und die Gejagten die Jäger (jeweils als Momentaufnahme, beschriftet mit dem **Alter**, z. B. „vor 3 min“) |
+| Pings | frei wählbares Intervall (1–180 min), erster Ping am Ende des Vorsprungs; **Vorwarnung** kurz vorher. Beim Ping sehen die Jäger die Gejagten – und die Gejagten die Jäger und die anderen Gejagten (jeweils als Momentaufnahme, beschriftet mit dem **Alter**, z. B. „vor 3 min“) |
 | Extra-Pings | gemeinsamer Vorrat für alle Jäger; die Spielleitung kann jederzeit einen Sofort-Ping auslösen |
 | **Blocks** | jeder Gejagte darf (einstellbar, Standard 1×) den nächsten Ping aussetzen und bleibt dabei unsichtbar |
 | Fangen | Gejagte melden sich selbst als gefangen und **werden dann Jäger**; die Spielleitung kann korrigieren |
@@ -159,7 +159,7 @@ Caddy auf dem Host (`reverse_proxy 127.0.0.1:3000`), Traefik und Nginx Proxy Man
 
 | | Spielleitung / Aufsicht | Jäger | Gejagte |
 |---|---|---|---|
-| Position der Gejagten | immer live | nur im laufenden Spiel und nur bei Pings (letzte 4, mit Spur); bei Block nicht | nie (nur die eigene) |
+| Position der Gejagten | immer live | nur im laufenden Spiel und nur bei Pings (letzte 4, mit Spur); bei Block nicht | die anderen Gejagten nur im laufenden Spiel und nur bei Pings (Momentaufnahme bis zum nächsten Ping); bei Block nicht |
 | Position der Jäger | immer live | nur im laufenden Spiel: andere Jäger-Teams live | nur im laufenden Spiel und nur bei Pings (Momentaufnahme bis zum nächsten Ping) |
 | Verkehrsmittel der Gejagten (Option) | ✓ | nur im laufenden Spiel (zuletzt gemeldet) | nur das eigene |
 | Nach Spielende | ✓ | keine Standorte mehr | keine Standorte |

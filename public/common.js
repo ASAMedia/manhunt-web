@@ -126,15 +126,15 @@ export function defaultRules(s, lang = 'de') {
   const lines = [
     'So läuft das Spiel',
     s.headStartMin > 0
-      ? `• Die Gejagten bekommen ${s.headStartMin} Minuten Vorsprung. Danach sehen die Jäger alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping) – und die Gejagten, wo die Jäger in diesem Moment sind. Dazwischen sieht niemand die andere Seite.`
-      : `• Ab Spielbeginn sehen die Jäger alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping) – und die Gejagten, wo die Jäger in diesem Moment sind. Dazwischen sieht niemand die andere Seite.`,
+      ? `• Die Gejagten bekommen ${s.headStartMin} Minuten Vorsprung. Danach sehen die Jäger alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping) – und die Gejagten, wo die Jäger und die anderen Gejagten in diesem Moment sind. Dazwischen sieht niemand die andere Seite.`
+      : `• Ab Spielbeginn sehen die Jäger alle ${s.pingIntervalMin} Minuten, wo die Gejagten gerade sind (Ping) – und die Gejagten, wo die Jäger und die anderen Gejagten in diesem Moment sind. Dazwischen sieht niemand die andere Seite.`,
   ];
   if (s.pingWarningSec) lines.push(`• ${fmtSeconds(s.pingWarningSec)} vor jedem Ping kommt eine Vorwarnung.`);
   lines.push('• Gefangen ist, wer von einem Jäger berührt wird. Dann auf „Ich wurde gefangen“ tippen – ab jetzt jagst du mit.');
   lines.push(`• Die Jäger gewinnen, wenn alle gefangen sind. Sind nach ${s.durationMin} Minuten noch Gejagte frei, gewinnen die Gejagten.`);
   if (s.zone) lines.push(`• Bleibt im Spielfeld (gestrichelte Linie auf der Karte).${s.shrinkEnabled ? ' Es wird im Laufe des Spiels kleiner.' : ''}`);
   if (s.transportReports) lines.push('• Gejagte melden beim Einsteigen, womit sie fahren (U-Bahn, S-Bahn, Bus, Tram), und beim Aussteigen „zu Fuß“. Die Jäger sehen nur das Verkehrsmittel, nicht die Linie.');
-  if (s.blocksPerRunner) lines.push(`• Jeder Gejagte darf ${s.blocksPerRunner === 1 ? 'einmal' : `${s.blocksPerRunner}-mal`} den nächsten Ping blockieren – dann sehen die Jäger ihn bei diesem Ping nicht.`);
+  if (s.blocksPerRunner) lines.push(`• Jeder Gejagte darf ${s.blocksPerRunner === 1 ? 'einmal' : `${s.blocksPerRunner}-mal`} den nächsten Ping blockieren – dann sehen ihn bei diesem Ping weder die Jäger noch die anderen Gejagten.`);
   lines.push('', 'Sicherheit');
   lines.push('• Immer als Gruppe zusammenbleiben. Nicht rennen auf Straßen, Bahnsteigen und Treppen. Keine Gleise betreten, keine Geschäfte oder Privatgelände.');
   lines.push('• Die Seite offen und das Display an lassen, Powerbank mitnehmen. Seite aus Versehen geschlossen? Den QR-Code noch einmal scannen – du bist sofort wieder in deinem Spiel.');
@@ -147,15 +147,15 @@ function defaultRulesEn(s) {
   const lines = [
     'How the game works',
     s.headStartMin > 0
-      ? `• Runners get a ${s.headStartMin}-minute head start. After that, every ${s.pingIntervalMin} minutes (ping) the hunters see where the runners are – and the runners see where the hunters are at that moment. In between, nobody sees the other side.`
-      : `• From the start, every ${s.pingIntervalMin} minutes (ping) the hunters see where the runners are – and the runners see where the hunters are at that moment. In between, nobody sees the other side.`,
+      ? `• Runners get a ${s.headStartMin}-minute head start. After that, every ${s.pingIntervalMin} minutes (ping) the hunters see where the runners are – and the runners see where the hunters and the other runners are at that moment. In between, nobody sees the other side.`
+      : `• From the start, every ${s.pingIntervalMin} minutes (ping) the hunters see where the runners are – and the runners see where the hunters and the other runners are at that moment. In between, nobody sees the other side.`,
   ];
   if (s.pingWarningSec) lines.push(`• You get a warning ${fmtSeconds(s.pingWarningSec, 'en')} before every ping.`);
   lines.push('• You are caught when a hunter touches you. Then tap “I was caught” – from then on you hunt too.');
   lines.push(`• The hunters win if everyone is caught. If runners are still free after ${s.durationMin} minutes, the runners win.`);
   if (s.zone) lines.push(`• Stay inside the play area (dashed line on the map).${s.shrinkEnabled ? ' It gets smaller during the game.' : ''}`);
   if (s.transportReports) lines.push('• Runners report how they travel when boarding (U-Bahn, S-Bahn, bus, tram) and “on foot” when getting off. Hunters only see the type, not the line.');
-  if (s.blocksPerRunner) lines.push(`• Each runner may block the next ping ${s.blocksPerRunner === 1 ? 'once' : `${s.blocksPerRunner} times`} – the hunters then don’t see them at that ping.`);
+  if (s.blocksPerRunner) lines.push(`• Each runner may block the next ping ${s.blocksPerRunner === 1 ? 'once' : `${s.blocksPerRunner} times`} – then neither the hunters nor the other runners see them at that ping.`);
   lines.push('', 'Safety');
   lines.push('• Always stay together as a group. Don’t run on streets, platforms or stairs. Never step onto tracks, don’t enter shops or private property.');
   lines.push('• Keep the page open and the screen on, bring a power bank. Closed the page by accident? Scan the QR code again – you are straight back in your game.');

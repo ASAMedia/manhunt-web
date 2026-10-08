@@ -101,10 +101,20 @@ function playerView(room, me) {
     lastPingKind: running ? room.pings.at(-1)?.kind ?? null : null,
   };
   if (room.status === 'lobby') view.lobby = players.map((p) => p.name);
-  // Gejagte sehen im Spiel beim Ping, wo die Jäger in diesem Moment waren – bis zum nächsten Ping
+  // Gejagte sehen im Spiel beim Ping, wo die Jäger und die anderen Gejagten in diesem Moment waren – bis zum
+  // nächsten Ping. Wer blockiert hat, ist auch für sie unsichtbar (sein Standort wird gar nicht gespeichert);
+  // wer inzwischen gefangen wurde, erscheint nicht mehr als Gejagter.
   const lastPing = room.pings.at(-1);
   if (running && me.role === 'runner' && lastPing?.hunters) {
     view.huntersAtPing = { at: lastPing.at, hunters: lastPing.hunters };
+  }
+  if (running && me.role === 'runner' && lastPing) {
+    view.runnersAtPing = {
+      at: lastPing.at,
+      runners: lastPing.positions
+        .filter((p) => p.lat != null && p.playerId !== me.id && room.players[p.playerId]?.role === 'runner')
+        .map((p) => ({ name: p.name, lat: p.lat, lng: p.lng })),
+    };
   }
   if (hunterInGame) {
     view.pings = room.pings.slice(-4).map((p) => ({ id: p.id, at: p.at, kind: p.kind, by: p.by, positions: p.positions }));

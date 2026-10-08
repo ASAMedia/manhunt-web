@@ -1317,6 +1317,14 @@ function drawMap() {
       .addTo(layers.hunters);
     ageLabels.hunters.push({ m, name: h.name, at: snap.at, text: label });
   }
+  // … und die anderen Gejagten beim Ping (blau gestrichelt)
+  const mates = room.status === 'running' ? S.runnersAtPing : null;
+  for (const r of mates?.runners || []) {
+    const label = pingLabel(r.name, mates.at);
+    const m = labeledMarker([r.lat, r.lng], { color: runnerColor, radius: 7 * scale, fill: 0.55, dashed: true, label })
+      .addTo(layers.hunters);
+    ageLabels.hunters.push({ m, name: r.name, at: mates.at, text: label });
+  }
   for (const h of room.status === 'running' ? S.hunters || [] : []) {
     const stale = now() - h.t > 120000;
     labeledMarker([h.lat, h.lng], { color: hunterColor, radius: 7 * scale, fill: stale ? 0.3 : 0.9, label: h.name, className: stale ? 'old' : '' })
@@ -1348,6 +1356,7 @@ function pingEffect(blocked) {
     for (const p of S.pings?.at(-1)?.positions || []) if (p.lat != null) pts.push([p.lat, p.lng, cssVar('--runner')]);
   } else if (S.me.role === 'runner') {
     for (const h of S.huntersAtPing?.hunters || []) pts.push([h.lat, h.lng, cssVar('--hunter-map')]);
+    for (const r of S.runnersAtPing?.runners || []) pts.push([r.lat, r.lng, cssVar('--runner')]);
     if (lastPos && !blocked) pts.push([lastPos.lat, lastPos.lng, cssVar('--runner')]);
   }
   for (const [lat, lng, c] of pts) {
@@ -1365,7 +1374,7 @@ function initialView() {
   if (centered || !map || !S) return;
   if (S.room.status === 'ended' && S.room.meetingPoint) return fitToMeeting();
   if (S.me.role === 'hunter' && S.pings?.some((p) => p.positions.some((x) => x.lat != null))) return fitToPing();
-  if (S.me.role === 'runner' && S.huntersAtPing?.hunters.length) return fitToPing();
+  if (S.me.role === 'runner' && (S.huntersAtPing?.hunters.length || S.runnersAtPing?.runners.length)) return fitToPing();
   let fit = null;
   if (S.room.zone) {
     const z = S.room.zone;
@@ -1414,13 +1423,14 @@ function drawOwn() {
   initialView();
 }
 
-// Karte auf den letzten Ping einpassen: Jäger sehen die Gejagten, Gejagte die Jäger – plus die eigene Position
+// Karte auf den letzten Ping einpassen: Jäger sehen die Gejagten, Gejagte die Jäger und die anderen Gejagten – plus die eigene Position
 function fitToPing() {
   if (!map || !S) return;
   const latest = S.pings?.at(-1);
   const pts = [
     ...(latest?.positions || []).filter((p) => p.lat != null).map((p) => [p.lat, p.lng]),
     ...(S.huntersAtPing?.hunters || []).map((h) => [h.lat, h.lng]),
+    ...(S.runnersAtPing?.runners || []).map((r) => [r.lat, r.lng]),
   ];
   if (lastPos) pts.push([lastPos.lat, lastPos.lng]);
   if (!pts.length) return;

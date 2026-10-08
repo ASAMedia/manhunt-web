@@ -153,6 +153,36 @@ export default async function einsatz({ base, adminPass, supPass, check, section
   check(ev1.events.some((e) => e.text.startsWith('Runde 1 gestartet')) && ev1.events.filter((e) => e.text.startsWith('Runde 1 gestartet')).length === 2, 'nächste Runde zählt wieder als Runde 1');
   await req('POST', `/api/admin/rooms/${er.id}/end`, undefined, A);
 
+  section('Gejagte sehen sich gegenseitig beim Ping');
+  const gr = (await req('POST', '/api/admin/rooms', { name: 'Gejagte sehen sich' }, A)).data;
+  await req('PATCH', `/api/admin/rooms/${gr.id}`, { settings: { headStartMin: 0, durationMin: 30, pingIntervalMin: 5, blocksPerRunner: 1 } }, A);
+  const gt = {};
+  const where = { Ria: [52.520, 13.400], Rob: [52.521, 13.401], Rex: [52.522, 13.402], Hugo: [52.523, 13.403] };
+  for (const n of Object.keys(where)) gt[n] = (await req('POST', `/api/join/${gr.code}`, { name: n }, xff)).data.token;
+  for (const p of (await req('GET', `/api/admin/rooms/${gr.id}`, undefined, A)).data.players) {
+    await req('PATCH', `/api/admin/rooms/${gr.id}/players/${p.id}`, { role: p.name === 'Hugo' ? 'hunter' : 'runner' }, A);
+  }
+  for (const [n, [lat, lng]] of Object.entries(where)) await req('POST', '/api/play/pos', { lat, lng, acc: 8 }, { token: gt[n] });
+  const viewOf = async (n) => (await req('GET', '/api/play/state', undefined, { token: gt[n] })).data;
+  check((await viewOf('Ria')).runnersAtPing === undefined, 'Lobby: keine Standorte anderer Gejagter');
+  await req('POST', `/api/admin/rooms/${gr.id}/start`, undefined, A);
+  await req('POST', '/api/play/block', undefined, { token: gt.Rob });
+  await req('POST', `/api/admin/rooms/${gr.id}/ping`, undefined, A);
+  const ria = await viewOf('Ria');
+  const names = (v) => (v.runnersAtPing?.runners || []).map((r) => r.name).sort().join();
+  check(names(ria) === 'Rex' && ria.runnersAtPing.runners[0].lat === 52.522, 'Gejagte sehen beim Ping die anderen Gejagten (ohne sich selbst, ohne Blockierte)', ria.runnersAtPing);
+  check(ria.huntersAtPing?.hunters.length === 1, 'und weiterhin die Jäger');
+  check(names(await viewOf('Rob')) === 'Rex,Ria', 'wer blockiert hat, sieht die anderen trotzdem');
+  const hugo = await viewOf('Hugo');
+  check(hugo.runnersAtPing === undefined && hugo.huntersAtPing === undefined, 'Jäger bekommen keine „Gejagte beim Ping“-Momentaufnahme (sie haben die Pings)');
+  // Rex bewegt sich nach dem Ping: Gejagte sehen weiter den Ping-Standort, nicht live
+  await req('POST', '/api/play/pos', { lat: 52.53, lng: 13.41, acc: 8 }, { token: gt.Rex });
+  check((await viewOf('Ria')).runnersAtPing.runners[0].lat === 52.522, 'nur Momentaufnahme beim Ping, keine Live-Position');
+  await req('POST', '/api/play/caught', undefined, { token: gt.Rex });
+  check(names(await viewOf('Ria')) === '', 'gefangene Gejagte erscheinen nicht mehr');
+  await req('POST', `/api/admin/rooms/${gr.id}/end`, undefined, A);
+  check((await viewOf('Ria')).runnersAtPing === undefined, 'nach Spielende: keine Standorte anderer Gejagter');
+
   section('Übersetzungen der neuen Texte');
   const src = fs.readFileSync(path.join(ROOT, 'public/i18n.js'), 'utf8');
   const [dePart, enPart] = src.split(/\n {2}en: \{/);
