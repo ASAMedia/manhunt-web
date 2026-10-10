@@ -35,12 +35,12 @@ function content(cfg, rp) {
     : hosting ? `The data is stored on the game master’s server at ${hosting} (processor).` : 'The data is stored on the game master’s server. If it is run by a hosting provider, that provider is a processor.';
   const accountsDe = [
     `Wer als Lehrkraft ein Konto anlegt, um eigene Spielräume zu verwalten: Name, Schule bzw. Organisation, E-Mail-Adresse, die Angaben für diese Datenschutz-Seite, das Passwort nur als nicht umkehrbarer Hash sowie Zeitpunkt der Registrierung und der letzten Anmeldung.`,
-    `Zweck: Zugang zur Spielleitung und Zuordnung der Räume (Art. 6 Abs. 1 lit. b DSGVO). Verantwortlich ist der Betreiber der Plattform${operator ? ` (${operator})` : ''}. Andere Lehrkräfte sehen das Konto nicht; der Admin sieht Name, Schule, E-Mail und die Räume.`,
+    `Zweck: Zugang zur Spielleitung und Zuordnung der Räume (Art. 6 Abs. 1 lit. b DSGVO). Verantwortlich ist der Betreiber der Plattform${operator ? ` (${operator})` : ''}. Andere Lehrkräfte sehen das Konto nicht; der Admin sieht Name, Schule, E-Mail und die Räume und bekommt bei der Registrierung ggf. eine E-Mail mit diesen Angaben.`,
     'Gelöscht wird das Konto mit allen Räumen jederzeit selbst unter „Mein Konto“ oder durch den Admin; nicht freigeschaltete Registrierungen nach 14 Tagen.',
   ];
   const accountsEn = [
     'If a teacher creates an account to manage their own game rooms: name, school or organisation, e-mail address, the details for this privacy notice, the password only as an irreversible hash, and the time of registration and last login.',
-    `Purpose: access to the game master area and assigning rooms (Art. 6(1)(b) GDPR). The controller is the platform operator${operator ? ` (${operator})` : ''}. Other teachers cannot see the account; the admin sees name, school, e-mail and the rooms.`,
+    `Purpose: access to the game master area and assigning rooms (Art. 6(1)(b) GDPR). The controller is the platform operator${operator ? ` (${operator})` : ''}. Other teachers cannot see the account; the admin sees name, school, e-mail and the rooms and may receive an e-mail with these details on registration.`,
     'The account and all its rooms can be deleted at any time under “My account” or by the admin; registrations that are never approved are deleted after 14 days.',
   ];
   if (lang === 'en') {

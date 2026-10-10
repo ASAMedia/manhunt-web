@@ -8,6 +8,7 @@ const config = require('./config');
 const { HttpError, randomId, cleanName } = require('./util');
 const { state, tokenIndex, markDirty, saveState, logEvent } = require('./store');
 const game = require('./game');
+const mail = require('./mail');
 const {
   route, readJson, rateLimit, limitKey, requireLogin, requireSuperAdmin, requireOwnPage, startSession, revokeSession, setAdminCookie,
   safeEqual, roomFor,
@@ -132,6 +133,19 @@ route('POST', '/api/account/register', async (req) => {
     state.users[u.id] = u;
     markDirty();
     console.log('Neue Registrierung wartet auf Freigabe'); // ohne Namen: Server-Protokolle überleben gelöschte Konten
+    const pendingNow = Object.values(state.users).filter((x) => x.status === 'pending').length;
+    // Link nur aus PUBLIC_URL – den Host-Header einer Anfrage könnte ein Angreifer fälschen (Link auf eine fremde Seite)
+    const adminUrl = config.PUBLIC_URL ? `${config.PUBLIC_URL}/admin` : 'deiner Manhunt-Seite unter /admin';
+    mail.notifyAdmin('Manhunt: neue Registrierung wartet auf Freigabe', [
+      'Eine neue Lehrkraft hat sich bei Manhunt registriert:',
+      '',
+      `Name:   ${name}`,
+      `Schule: ${org}`,
+      `E-Mail: ${email}`,
+      '',
+      `Freigeben oder ablehnen: ${adminUrl} → Räume → Konten${pendingNow > 1 ? ` (insgesamt ${pendingNow} wartend)` : ''}`,
+      `Ohne Freigabe wird die Registrierung nach ${PENDING_DAYS} Tagen gelöscht.`,
+    ].join('\n'));
   }
   return { ok: true };
 });
@@ -205,6 +219,7 @@ route('GET', '/api/admin/users', (req) => {
   const order = { pending: 0, active: 1, disabled: 2 };
   return {
     registrationOpen: !!state.platform.registrationOpen,
+    mail: mail.enabled() ? config.ADMIN_EMAIL : null,
     users: Object.values(state.users)
       .sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name, 'de'))
       .map((u) => ({
@@ -247,6 +262,18 @@ route('DELETE', '/api/admin/users/:id', (req, res, { id }) => {
   console.log(`Konto gelöscht (Admin), ${roomsOf(u.id).length} Räume`);
   deleteUser(u);
   return { ok: true };
+});
+
+// Test-Mail an den Admin – zum Einrichten (zeigt die Fehlermeldung des Mail-Servers)
+route('POST', '/api/admin/mail-test', async (req) => {
+  requireSuperAdmin(req);
+  rateLimit(req, 'mail-test', 5, 10 * 60e3);
+  try {
+    await mail.sendAdminMail('Manhunt: Test-Mail', 'Diese Test-Mail zeigt: Benachrichtigungen bei neuen Registrierungen kommen an.');
+  } catch (e) {
+    throw new HttpError(502, `Test-Mail fehlgeschlagen: ${e.message}`);
+  }
+  return { ok: true, to: config.ADMIN_EMAIL };
 });
 
 route('PATCH', '/api/admin/platform', async (req) => {

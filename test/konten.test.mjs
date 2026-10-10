@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { client, sleep } from './lib.mjs';
 
-export default async function konten({ base, adminPass, supPass, check, section, dataDir }) {
+export default async function konten({ base, adminPass, supPass, check, section, dataDir, smtp }) {
   const req = client(base);
   const A = { admin: true };
   const SUP = { as: 'sup' };
@@ -25,11 +25,26 @@ export default async function konten({ base, adminPass, supPass, check, section,
   check((await req('POST', '/api/admin/login', { password: adminPass }, { noHeader: true, as: 'csrf', ...from() })).status === 403, 'Anmeldung nur aus der eigenen Seite (Login-CSRF)');
   check((await reg({ name: 'Frau Kurz', email: 'kurz@schule.example', org: 'Schule X', password: 'kurz' })).status === 400, 'zu kurzes Passwort → abgelehnt');
   check((await reg({ name: 'Frau Kurz', email: 'keine-mail', org: 'Schule X', password: 'lang-genug-123' })).status === 400, 'ungültige E-Mail → abgelehnt');
+  const mailsBefore = smtp.messages.length;
   const r1 = await reg({ name: 'Frau Meier', email: 'Meier@Schule-A.example ', org: 'Gymnasium A', password: 'meier-passwort-1' });
   check(r1.status === 200 && r1.data.ok, 'Frau Meier registriert');
+  let mail = null;
+  for (let i = 0; i < 30 && !mail; i++) { await sleep(100); mail = smtp.messages[mailsBefore]; }
+  check(!!mail && mail.to.some((t) => t.includes('admin@manhunt.example')), 'Admin bekommt eine Mail zur neuen Registrierung', mail?.to);
+  check(mail && /Frau Meier/.test(mail.data) && /Gymnasium A/.test(mail.data) && /meier@schule-a\.example/.test(mail.data)
+    && mail.data.includes('deiner Manhunt-Seite unter /admin'), 'Mail nennt Name, Schule, E-Mail und den Link zur Freigabe', mail?.data.slice(-500));
+  check(smtp.auths.at(-1)?.join('|') === 'versand@manhunt.example|smtp-geheim', 'Versand mit dem eingetragenen Mail-Konto');
   await reg({ name: 'Herr Schulz', email: 'schulz@schule-b.example', org: 'Realschule B', password: 'schulz-passwort-1' });
   const dup = await reg({ name: 'Doppelt', email: 'meier@schule-a.example', org: 'Schule X', password: 'anderes-passwort' });
-  const users = (await req('GET', '/api/admin/users', undefined, A)).data.users;
+  await sleep(800);
+  check(smtp.messages.length === mailsBefore + 2, 'doppelte E-Mail-Adresse: keine zweite Mail', smtp.messages.length - mailsBefore);
+  const usersData = (await req('GET', '/api/admin/users', undefined, A)).data;
+  check(usersData.mail === 'admin@manhunt.example', 'Konten-Fenster zeigt, wohin die Mails gehen');
+  const t0 = smtp.messages.length;
+  check((await req('POST', '/api/admin/mail-test', undefined, A)).status === 200 && smtp.messages.length === t0 + 1
+    && /Test-Mail/.test(smtp.messages.at(-1).data), 'Test-Mail an den Admin');
+  check((await req('POST', '/api/admin/mail-test', undefined, SUP)).status === 403, 'Test-Mail nur durch den Admin');
+  const users = usersData.users;
   check(dup.status === 200 && users.length === 2, 'doppelte E-Mail: gleiche Antwort, aber kein zweites Konto', { dup, users: users.map((u) => u.email) });
   check(users.every((u) => u.status === 'pending'), 'neue Konten warten auf Freigabe');
   check((await login('m1', 'meier@schule-a.example', 'meier-passwort-1')).status === 403, 'vor der Freigabe: Anmeldung abgelehnt (403)');

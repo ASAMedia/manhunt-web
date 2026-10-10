@@ -86,6 +86,10 @@ async function setupChecks(req) {
   const active = users.filter((u) => u.status === 'active').length;
   add(pending ? 'warn' : 'info', 'Lehrkräfte-Konten',
     `${active} aktiv${pending ? `, ${pending} ${pending === 1 ? 'wartet' : 'warten'} auf Freigabe (Räume → Konten)` : ''} · Registrierung ${state.platform.registrationOpen ? 'offen (/registrieren)' : 'geschlossen'}.`);
+  add(config.ADMIN_EMAIL && config.SMTP_HOST ? 'ok' : 'info', 'E-Mail bei Registrierungen',
+    config.ADMIN_EMAIL && config.SMTP_HOST
+      ? `Neue Registrierungen gehen per Mail an ${config.ADMIN_EMAIL} (Test-Mail unter Räume → Konten).`
+      : 'Aus. Für eine Mail bei jeder neuen Registrierung ADMIN_EMAIL und SMTP_HOST, SMTP_USER, SMTP_PASS in der .env setzen.');
   if (users.length && !config.PRIVACY_OPERATOR) {
     add('info', 'Betreiber-Angabe', 'Nutzen Lehrkräfte anderer Schulen die Plattform, PRIVACY_OPERATOR in der .env setzen (Betreiber der Plattform, z. B. Name und Anschrift) – er steht dann auf deren Datenschutz-Seite. Mit jeder Schule einen Vertrag zur Auftragsverarbeitung schließen.');
   }

@@ -91,6 +91,47 @@ export function tileMock() {
   });
 }
 
+// Schein-Mailserver (SMTP, ohne TLS): nimmt Mails an und merkt sie sich – prüft auch die Anmeldung (AUTH PLAIN)
+export function smtpMock() {
+  return new Promise((resolve) => {
+    const mock = { messages: [], auths: [] };
+    const srv = net.createServer((sock) => {
+      sock.setEncoding('utf8');
+      let buf = '';
+      let msg = null;
+      let inData = false;
+      const say = (line) => sock.write(`${line}\r\n`);
+      say('220 mock ESMTP');
+      sock.on('data', (chunk) => {
+        buf += chunk;
+        let i;
+        while ((i = buf.indexOf('\r\n')) >= 0) {
+          const line = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          if (inData) {
+            if (line === '.') { inData = false; mock.messages.push(msg); say('250 OK queued'); } else msg.data += `${line}\n`;
+            continue;
+          }
+          const cmd = line.slice(0, 4).toUpperCase();
+          if (cmd === 'EHLO' || cmd === 'HELO') { sock.write('250-mock\r\n250-AUTH PLAIN\r\n250 8BITMIME\r\n'); }
+          else if (cmd === 'AUTH') { mock.auths.push(Buffer.from(line.split(' ')[2] || '', 'base64').toString('utf8').split('\0').slice(1)); say('235 OK'); }
+          else if (cmd === 'MAIL') { msg = { from: line, to: [], data: '' }; say('250 OK'); }
+          else if (cmd === 'RCPT') { msg.to.push(line); say('250 OK'); }
+          else if (cmd === 'DATA') { inData = true; say('354 go'); }
+          else if (cmd === 'QUIT') { say('221 bye'); sock.end(); }
+          else say('250 OK');
+        }
+      });
+      sock.on('error', () => {});
+    });
+    srv.listen(0, '127.0.0.1', () => {
+      mock.port = srv.address().port;
+      mock.close = () => srv.close();
+      resolve(mock);
+    });
+  });
+}
+
 export function results() {
   let failures = 0;
   let passed = 0;

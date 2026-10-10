@@ -1540,6 +1540,16 @@ async function showAccounts() {
     el('h2', { text: 'Konten der Lehrkräfte' }),
     el('label', { class: 'check' }, toggle, ` Registrierung offen – unter ${baseUrl()}/registrieren`),
     el('p', { class: 'small muted', text: 'Lehrkräfte sehen nur ihre eigenen Räume und bekommen nur deren Alarme. Du siehst alle Räume, bekommst aber keine Alarme aus fremden Räumen. Nicht freigegebene Registrierungen werden nach 14 Tagen gelöscht.' }),
+    el('div', { class: 'row small' },
+      el('span', { text: data.mail ? `✉ Neue Registrierungen kommen per Mail an ${data.mail}.` : '✉ Mail bei neuen Registrierungen: aus (ADMIN_EMAIL und SMTP_… in der .env).' }),
+      data.mail ? b('Test-Mail senden', async (e) => {
+        e.target.disabled = true;
+        try {
+          const r = await api('POST', '/api/admin/mail-test');
+          toast(`Test-Mail an ${r.to} verschickt – Posteingang (und Spam-Ordner) prüfen`);
+        } catch (err) { handleError(err); }
+        e.target.disabled = false;
+      }) : null),
     linkBox,
     pending.length ? el('h3', { text: `Warten auf Freigabe (${pending.length})` }) : null,
     pending.length ? el('ul', { class: 'list account-list' }, pending.map(item)) : null,

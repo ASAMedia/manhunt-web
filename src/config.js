@@ -39,6 +39,13 @@ const config = {
   PRIVACY_OPERATOR: (env.PRIVACY_OPERATOR || '').slice(0, 300),
   // Lehrkräfte-Konten: höchstens so viele Räume je Konto (der Admin hat keine Grenze)
   MAX_ROOMS_PER_USER: Number(env.MAX_ROOMS_PER_USER) || 20,
+  // E-Mail an den Admin bei neuen Registrierungen (über ein vorhandenes Mail-Konto)
+  ADMIN_EMAIL: (env.ADMIN_EMAIL || '').trim(),
+  SMTP_HOST: (env.SMTP_HOST || '').trim(),
+  SMTP_PORT: Number(env.SMTP_PORT) || 587,
+  SMTP_USER: env.SMTP_USER || '',
+  SMTP_PASS: env.SMTP_PASS || '',
+  SMTP_FROM: (env.SMTP_FROM || '').trim(),
 
   PUBLIC_DIR: path.join(ROOT, 'public'),
   LEAFLET_DIR: path.join(path.dirname(require.resolve('leaflet/package.json')), 'dist'),

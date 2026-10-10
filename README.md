@@ -168,6 +168,7 @@ Neben dem Admin (`ADMIN_PASSWORD`) können Lehrkräfte – auch anderer Schulen 
 | Einrichtungs-Check, Fehlerberichte | ✓ | – | – | – |
 
 - **Registrierung:** `/registrieren` (Name, Schule, E-Mail, Passwort). Das Konto ist erst nach der Freigabe durch den Admin nutzbar (Räume → **Konten**); nicht freigegebene Registrierungen werden nach 14 Tagen gelöscht. Die Registrierung lässt sich dort auch schließen.
+- **Benachrichtigung:** Mit `ADMIN_EMAIL` und einem SMTP-Konto bekommt der Admin bei jeder neuen Registrierung eine Mail (Name, Schule, E-Mail, Link zur Freigabe; höchstens 10 pro Stunde). Unter **Konten** gibt es eine Test-Mail.
 - **Anmeldung:** `/admin` mit E-Mail und Passwort. Admin und Aufsicht lassen die E-Mail leer.
 - **Passwort vergessen:** Der Admin erzeugt unter **Konten** einen einmaligen Link (48 h gültig) und gibt ihn selbst weiter – der Server verschickt keine Mails.
 - **Aufsicht-Link:** Im Raum unter „Einladen“ → **Aufsicht-Link** (QR-Code): Kolleg:innen sehen ohne Konto genau diesen Raum, bekommen dessen Alarme und senden Nachrichten. „Neuer Link“ bzw. „Zurückziehen“ meldet sie sofort ab.
@@ -215,6 +216,8 @@ Neben dem Admin (`ADMIN_PASSWORD`) können Lehrkräfte – auch anderer Schulen 
 | `PRIVACY_HOSTING` | Hosting-Anbieter und Standort des Servers (Auftragsverarbeiter), leer bei eigenem Gerät |
 | `PRIVACY_OPERATOR` | Betreiber der Plattform (Name, Anschrift) – für die Datenschutz-Seite, wenn Lehrkräfte anderer Schulen Konten haben |
 | `MAX_ROOMS_PER_USER` | höchstens so viele Räume je Lehrkräfte-Konto (Standard 20) |
+| `ADMIN_EMAIL` | an diese Adresse geht bei jeder neuen Registrierung eine Mail (leer = aus) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Mail-Konto für den Versand (z. B. web.de: `smtp.web.de`, 587; dort vorher POP3/IMAP-Zugriff erlauben) |
 | `AUTO_DELETE_DAYS` | Tage bis zum automatischen Löschen (Standard 7, `0` = nie) |
 | `TILE_PROXY` | Karten über den Server zwischenspeichern (Standard `1`) |
 | `TILE_CACHE_MAX_MB` | Obergrenze für den Kartenspeicher (Standard 1000 MB) |
