@@ -107,6 +107,12 @@ Starten und später aktualisieren – immer derselbe Befehl:
 docker compose pull && docker compose up -d
 ```
 
+`pull` holt nur das neue Programm, **nicht** die `docker-compose.yml`. Bringt eine neue Version neue Einstellungen mit und deine `docker-compose.yml` ist älter als Oktober 2026 (ohne `env_file: .env`), die Datei einmal neu holen – danach kommen alle Variablen aus der `.env` automatisch an:
+
+```bash
+cp docker-compose.yml docker-compose.yml.bak && curl -fsSL https://raw.githubusercontent.com/ASAMedia/manhunt-web/main/docker-compose.yml -o docker-compose.yml && docker compose up -d
+```
+
 Ist das Image privat, einmalig auf dem Server anmelden (Token mit Recht `read:packages`, selbst eingeben): `docker login ghcr.io -u ASAMedia`.
 
 > **Zusatzdienst abschalten:** Aus `COMPOSE_PROFILES` herausnehmen reicht nicht – ein schon laufender Container läuft weiter. Zusätzlich `docker compose rm -sf caddy` (bzw. `tunnel`, `autoupdate`) ausführen.

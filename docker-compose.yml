@@ -32,6 +32,10 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
+    # Alle Einstellungen aus der .env – auch solche, die erst eine spätere Version kennt
+    # (sonst kämen neue Variablen erst nach einem Update dieser Datei im Container an)
+    env_file: .env
+    # Standardwerte und feste Einstellungen; haben Vorrang vor env_file
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Bitte ADMIN_PASSWORD in .env setzen}
       SUPERVISOR_PASSWORD: ${SUPERVISOR_PASSWORD:-}
