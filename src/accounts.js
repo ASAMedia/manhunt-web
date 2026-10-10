@@ -264,16 +264,18 @@ route('DELETE', '/api/admin/users/:id', (req, res, { id }) => {
   return { ok: true };
 });
 
-// Test-Mail an den Admin – zum Einrichten (zeigt die Fehlermeldung des Mail-Servers)
-route('POST', '/api/admin/mail-test', async (req) => {
+// Mail-Prüfung im Admin-Bereich: Einstellungen (ohne Passwort) und letzte Benachrichtigung …
+route('GET', '/api/admin/mail', (req) => {
   requireSuperAdmin(req);
-  rateLimit(req, 'mail-test', 5, 10 * 60e3);
-  try {
-    await mail.sendAdminMail('Manhunt: Test-Mail', 'Diese Test-Mail zeigt: Benachrichtigungen bei neuen Registrierungen kommen an.');
-  } catch (e) {
-    throw new HttpError(502, `Test-Mail fehlgeschlagen: ${e.message}`);
-  }
-  return { ok: true, to: config.ADMIN_EMAIL };
+  return mail.status();
+});
+
+// … und Schritt für Schritt prüfen: Verbindung und Anmeldung, auf Wunsch eine Test-Mail (send: true)
+route('POST', '/api/admin/mail-check', async (req) => {
+  requireSuperAdmin(req);
+  rateLimit(req, 'mail-check', 10, 10 * 60e3);
+  const { send } = await readJson(req);
+  return mail.checkMail({ send: send === true });
 });
 
 route('PATCH', '/api/admin/platform', async (req) => {

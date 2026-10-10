@@ -1541,15 +1541,8 @@ async function showAccounts() {
     el('label', { class: 'check' }, toggle, ` Registrierung offen – unter ${baseUrl()}/registrieren`),
     el('p', { class: 'small muted', text: 'Lehrkräfte sehen nur ihre eigenen Räume und bekommen nur deren Alarme. Du siehst alle Räume, bekommst aber keine Alarme aus fremden Räumen. Nicht freigegebene Registrierungen werden nach 14 Tagen gelöscht.' }),
     el('div', { class: 'row small' },
-      el('span', { text: data.mail ? `✉ Neue Registrierungen kommen per Mail an ${data.mail}.` : '✉ Mail bei neuen Registrierungen: aus (ADMIN_EMAIL und SMTP_… in der .env).' }),
-      data.mail ? b('Test-Mail senden', async (e) => {
-        e.target.disabled = true;
-        try {
-          const r = await api('POST', '/api/admin/mail-test');
-          toast(`Test-Mail an ${r.to} verschickt – Posteingang (und Spam-Ordner) prüfen`);
-        } catch (err) { handleError(err); }
-        e.target.disabled = false;
-      }) : null),
+      el('span', { text: data.mail ? `✉ Neue Registrierungen kommen per Mail an ${data.mail}.` : '✉ Mail bei neuen Registrierungen: aus.' }),
+      b('E-Mail prüfen', showMailCheck)),
     linkBox,
     pending.length ? el('h3', { text: `Warten auf Freigabe (${pending.length})` }) : null,
     pending.length ? el('ul', { class: 'list account-list' }, pending.map(item)) : null,
@@ -1558,6 +1551,62 @@ async function showAccounts() {
     el('button', { class: 'btn primary', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
 }
 $('#accountsBtn').addEventListener('click', showAccounts);
+
+// ---------------------------------------------------------------------------
+// E-Mail prüfen (nur Admin): Einstellungen anzeigen, Verbindung/Anmeldung testen, Test-Mail senden
+// ---------------------------------------------------------------------------
+
+async function showMailCheck() {
+  let s;
+  try { s = await api('GET', '/api/admin/mail'); } catch (e) { return handleError(e); }
+  const results = el('ul', { class: 'list mail-steps', 'aria-live': 'polite' });
+  const run = async (send, btn) => {
+    for (const x of buttons) x.disabled = true;
+    btn.textContent = send ? 'Sende …' : 'Prüfe …';
+    results.replaceChildren(el('li', { class: 'small muted', text: 'Verbinde mit dem Mailserver …' }));
+    try {
+      const r = await api('POST', '/api/admin/mail-check', { send });
+      results.replaceChildren(...r.steps.map((x) => el('li', { class: `mail-step ${x.ok ? 'ok' : 'fail'}` },
+        el('span', { class: 'mail-icon', 'aria-hidden': 'true', text: x.ok ? '✓' : '✗' }),
+        el('div', {}, el('strong', { text: x.step }), el('div', { class: 'small', text: x.text })))));
+      lastBox.replaceChildren(...lastLine(r.status));
+    } catch (e) {
+      results.replaceChildren(el('li', { class: 'mail-step fail', text: e.message }));
+    }
+    buttons[0].textContent = 'Verbindung prüfen';
+    buttons[1].textContent = 'Test-Mail senden';
+    for (const x of buttons) x.disabled = !s.enabled;
+  };
+  const lastLine = (st) => [st.last
+    ? el('span', { class: st.last.ok ? '' : 'error', text: `Letzte Benachrichtigung: ${fmtDate(st.last.at)} – ${st.last.ok ? 'verschickt' : st.last.error}` })
+    : el('span', { class: 'muted', text: 'Seit dem letzten Neustart wurde noch keine Benachrichtigung verschickt.' }),
+  el('span', { class: 'muted', text: ` · diese Stunde ${st.sentThisHour} von höchstens ${st.maxPerHour}` })];
+  const lastBox = el('div', { class: 'small' }, ...lastLine(s));
+  const buttons = [
+    el('button', { class: 'btn', type: 'button', disabled: !s.enabled, text: 'Verbindung prüfen', onclick: (e) => run(false, e.target) }),
+    el('button', { class: 'btn primary', type: 'button', disabled: !s.enabled, text: 'Test-Mail senden', onclick: (e) => run(true, e.target) }),
+  ];
+  const row = (k, v, warn = false) => [el('dt', { text: k }), el('dd', { class: warn ? 'error' : '', text: v })];
+  openOverlay(el('div', { class: 'card stack accounts-card' },
+    el('h2', { text: 'E-Mail-Benachrichtigung prüfen' }),
+    el('p', { class: 'small muted', text: 'Bei jeder neuen Registrierung schickt der Server dir eine Mail. Hier siehst du die Einstellungen aus der .env und kannst sie testen – ohne dass eine echte Registrierung nötig ist.' }),
+    s.enabled ? null : el('div', { class: 'alert', text: `Die Mail ist aus – in der .env fehlt: ${s.missing.join(', ')}. Danach den Container neu starten (docker compose up -d).` }),
+    el('dl', { class: 'player-info' },
+      row('Empfänger', s.to || '– (ADMIN_EMAIL)', !s.to),
+      row('Mailserver', s.host ? `${s.host}:${s.port}` : '– (SMTP_HOST)', !s.host),
+      row('Verschlüsselung', s.encryption),
+      row('Anmeldung', s.user ? `${s.user} · Passwort ${s.passwordSet ? 'gesetzt' : 'fehlt (SMTP_PASS)'}` : 'ohne (SMTP_USER leer)', !!s.user && !s.passwordSet),
+      row('Absender', s.from || '–')),
+    lastBox,
+    el('div', { class: 'row' }, buttons),
+    results,
+    el('details', { class: 'small' },
+      el('summary', { text: 'Beispiel für die .env (web.de)' }),
+      el('pre', { class: 'small', text: 'ADMIN_EMAIL=deine-adresse@web.de\nSMTP_HOST=smtp.web.de\nSMTP_PORT=587\nSMTP_USER=versand-postfach@web.de\nSMTP_PASS=…\nPUBLIC_URL=https://deine-domain' }),
+      el('p', { text: 'Bei web.de vorher unter Einstellungen → POP3/IMAP Abruf den Zugriff erlauben. Änderungen an der .env wirken erst nach „docker compose up -d“.' })),
+    el('button', { class: 'btn', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
+}
+$('#mailCheckBtn').addEventListener('click', showMailCheck);
 
 // Raum einem anderen Konto übergeben (nur Admin, Einstellungen)
 async function renderOwnerSelect() {

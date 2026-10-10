@@ -168,7 +168,7 @@ Neben dem Admin (`ADMIN_PASSWORD`) können Lehrkräfte – auch anderer Schulen 
 | Einrichtungs-Check, Fehlerberichte | ✓ | – | – | – |
 
 - **Registrierung:** `/registrieren` (Name, Schule, E-Mail, Passwort). Das Konto ist erst nach der Freigabe durch den Admin nutzbar (Räume → **Konten**); nicht freigegebene Registrierungen werden nach 14 Tagen gelöscht. Die Registrierung lässt sich dort auch schließen.
-- **Benachrichtigung:** Mit `ADMIN_EMAIL` und einem SMTP-Konto bekommt der Admin bei jeder neuen Registrierung eine Mail (Name, Schule, E-Mail, Link zur Freigabe; höchstens 10 pro Stunde). Unter **Konten** gibt es eine Test-Mail.
+- **Benachrichtigung:** Mit `ADMIN_EMAIL` und einem SMTP-Konto bekommt der Admin bei jeder neuen Registrierung eine Mail (Name, Schule, E-Mail, Link zur Freigabe; höchstens 10 pro Stunde). Unter **Konten** bzw. im Einrichtungs-Check → **E-Mail prüfen**: Einstellungen ansehen, Verbindung und Anmeldung testen, Test-Mail senden – mit verständlicher Fehlerursache (z. B. falscher Port, Anmeldung abgelehnt, Absender nicht erlaubt).
 - **Anmeldung:** `/admin` mit E-Mail und Passwort. Admin und Aufsicht lassen die E-Mail leer.
 - **Passwort vergessen:** Der Admin erzeugt unter **Konten** einen einmaligen Link (48 h gültig) und gibt ihn selbst weiter – der Server verschickt keine Mails.
 - **Aufsicht-Link:** Im Raum unter „Einladen“ → **Aufsicht-Link** (QR-Code): Kolleg:innen sehen ohne Konto genau diesen Raum, bekommen dessen Alarme und senden Nachrichten. „Neuer Link“ bzw. „Zurückziehen“ meldet sie sofort ab.

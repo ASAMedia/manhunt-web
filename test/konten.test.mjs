@@ -1,8 +1,10 @@
 // Lehrkräfte-Konten: Registrierung mit Freigabe, nur eigene Räume, Admin sieht alles (ohne fremde Alarme),
 // Aufsicht-Link pro Raum, Datenschutz-Angaben pro Konto, Passwort-Links, Sperren und Löschen
 import fs from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
-import { client, sleep } from './lib.mjs';
+import { client, sleep, startServer, smtpMock } from './lib.mjs';
 
 export default async function konten({ base, adminPass, supPass, check, section, dataDir, smtp }) {
   const req = client(base);
@@ -40,10 +42,40 @@ export default async function konten({ base, adminPass, supPass, check, section,
   check(smtp.messages.length === mailsBefore + 2, 'doppelte E-Mail-Adresse: keine zweite Mail', smtp.messages.length - mailsBefore);
   const usersData = (await req('GET', '/api/admin/users', undefined, A)).data;
   check(usersData.mail === 'admin@manhunt.example', 'Konten-Fenster zeigt, wohin die Mails gehen');
+
+  section('E-Mail prüfen');
+  const ms = (await req('GET', '/api/admin/mail', undefined, A)).data;
+  check(ms.enabled && ms.host === '127.0.0.1' && ms.user === 'versand@manhunt.example' && ms.passwordSet === true, 'Einstellungen werden angezeigt', ms);
+  check(!JSON.stringify(ms).includes('smtp-geheim'), 'das Mail-Passwort wird nie angezeigt');
+  check(ms.last?.ok === true && /neue Registrierung/.test(ms.last.subject), 'letzte Benachrichtigung: verschickt', ms.last);
   const t0 = smtp.messages.length;
-  check((await req('POST', '/api/admin/mail-test', undefined, A)).status === 200 && smtp.messages.length === t0 + 1
-    && /Test-Mail/.test(smtp.messages.at(-1).data), 'Test-Mail an den Admin');
-  check((await req('POST', '/api/admin/mail-test', undefined, SUP)).status === 403, 'Test-Mail nur durch den Admin');
+  const v = (await req('POST', '/api/admin/mail-check', { send: false }, A)).data;
+  check(v.ok && v.steps.map((x) => x.step).join() === 'Einstellungen,Verbindung und Anmeldung' && smtp.messages.length === t0,
+    '„Verbindung prüfen“: Anmeldung klappt, es wird nichts verschickt', v.steps);
+  const sm = (await req('POST', '/api/admin/mail-check', { send: true }, A)).data;
+  check(sm.ok && sm.steps.at(-1).step === 'Test-Mail' && smtp.messages.length === t0 + 1 && /Test-Mail/.test(smtp.messages.at(-1).data), '„Test-Mail senden“ kommt an', sm.steps);
+  check((await req('POST', '/api/admin/mail-check', { send: true }, SUP)).status === 403 && (await req('GET', '/api/admin/mail', undefined, SUP)).status === 403,
+    'Mail-Prüfung nur durch den Admin');
+  // Fehler verständlich erklärt: falscher Port, abgelehnte Anmeldung, nicht eingerichtet
+  const bad = await smtpMock({ rejectAuth: true });
+  const closedPort = await new Promise((resolve) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
+  for (const [label, env, expect] of [
+    ['falscher Port', { SMTP_PORT: String(closedPort) }, /abgelehnt – SMTP_PORT prüfen/],
+    ['falsches Passwort', { SMTP_PORT: String(bad.port) }, /Anmeldung abgelehnt – SMTP_USER und SMTP_PASS prüfen/],
+    ['nicht eingerichtet', { SMTP_HOST: '' }, /Fehlt in der \.env: SMTP_HOST/],
+  ]) {
+    const srv2 = await startServer({
+      ADMIN_PASSWORD: adminPass, DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'manhunt-mail-')), TILE_PROXY: '0',
+      ADMIN_EMAIL: 'admin@manhunt.example', SMTP_HOST: '127.0.0.1', SMTP_USER: 'versand@manhunt.example', SMTP_PASS: 'falsch', ...env,
+    });
+    const r2 = client(srv2.base);
+    await r2('POST', '/api/admin/login', { password: adminPass });
+    const res = (await r2('POST', '/api/admin/mail-check', { send: true }, { admin: true })).data;
+    const failed = res.steps.find((x) => !x.ok);
+    check(!res.ok && expect.test(failed?.text || ''), `Mail-Prüfung erklärt: ${label}`, res.steps);
+    await srv2.stop();
+  }
+  bad.close();
   const users = usersData.users;
   check(dup.status === 200 && users.length === 2, 'doppelte E-Mail: gleiche Antwort, aber kein zweites Konto', { dup, users: users.map((u) => u.email) });
   check(users.every((u) => u.status === 'pending'), 'neue Konten warten auf Freigabe');

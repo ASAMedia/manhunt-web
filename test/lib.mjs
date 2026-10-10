@@ -92,7 +92,7 @@ export function tileMock() {
 }
 
 // Schein-Mailserver (SMTP, ohne TLS): nimmt Mails an und merkt sie sich – prüft auch die Anmeldung (AUTH PLAIN)
-export function smtpMock() {
+export function smtpMock({ rejectAuth = false } = {}) {
   return new Promise((resolve) => {
     const mock = { messages: [], auths: [] };
     const srv = net.createServer((sock) => {
@@ -114,7 +114,10 @@ export function smtpMock() {
           }
           const cmd = line.slice(0, 4).toUpperCase();
           if (cmd === 'EHLO' || cmd === 'HELO') { sock.write('250-mock\r\n250-AUTH PLAIN\r\n250 8BITMIME\r\n'); }
-          else if (cmd === 'AUTH') { mock.auths.push(Buffer.from(line.split(' ')[2] || '', 'base64').toString('utf8').split('\0').slice(1)); say('235 OK'); }
+          else if (cmd === 'AUTH') {
+            mock.auths.push(Buffer.from(line.split(' ')[2] || '', 'base64').toString('utf8').split('\0').slice(1));
+            say(rejectAuth ? '535 5.7.8 Authentication credentials invalid' : '235 OK');
+          }
           else if (cmd === 'MAIL') { msg = { from: line, to: [], data: '' }; say('250 OK'); }
           else if (cmd === 'RCPT') { msg.to.push(line); say('250 OK'); }
           else if (cmd === 'DATA') { inData = true; say('354 go'); }

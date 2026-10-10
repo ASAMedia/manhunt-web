@@ -88,7 +88,7 @@ async function setupChecks(req) {
     `${active} aktiv${pending ? `, ${pending} ${pending === 1 ? 'wartet' : 'warten'} auf Freigabe (Räume → Konten)` : ''} · Registrierung ${state.platform.registrationOpen ? 'offen (/registrieren)' : 'geschlossen'}.`);
   add(config.ADMIN_EMAIL && config.SMTP_HOST ? 'ok' : 'info', 'E-Mail bei Registrierungen',
     config.ADMIN_EMAIL && config.SMTP_HOST
-      ? `Neue Registrierungen gehen per Mail an ${config.ADMIN_EMAIL} (Test-Mail unter Räume → Konten).`
+      ? `Neue Registrierungen gehen per Mail an ${config.ADMIN_EMAIL} – „E-Mail prüfen“ testet Verbindung und Versand.`
       : 'Aus. Für eine Mail bei jeder neuen Registrierung ADMIN_EMAIL und SMTP_HOST, SMTP_USER, SMTP_PASS in der .env setzen.');
   if (users.length && !config.PRIVACY_OPERATOR) {
     add('info', 'Betreiber-Angabe', 'Nutzen Lehrkräfte anderer Schulen die Plattform, PRIVACY_OPERATOR in der .env setzen (Betreiber der Plattform, z. B. Name und Anschrift) – er steht dann auf deren Datenschutz-Seite. Mit jeder Schule einen Vertrag zur Auftragsverarbeitung schließen.');

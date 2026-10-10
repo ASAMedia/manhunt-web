@@ -1011,3 +1011,11 @@ body:not(.kind-manager) .manager-only { display: none !important; }
 .account-item.pending { background: color-mix(in srgb, var(--amber) 12%, transparent); margin: 0 -.5rem; padding: .7rem .5rem; border-radius: 8px; }
 .link-box { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .75rem; background: var(--surface-2); }
 #whoami { font-weight: 600; }
+
+/* Mail-Prüfung */
+.mail-steps li { display: flex; gap: .6rem; align-items: flex-start; justify-content: flex-start; }
+.mail-step .mail-icon { flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 800; }
+.mail-step.ok .mail-icon { background: var(--ok); }
+.mail-step.fail .mail-icon { background: var(--danger-solid); }
+.mail-step.fail { color: var(--text); }
+.accounts-card pre { white-space: pre-wrap; background: var(--surface-2); padding: .5rem .7rem; border-radius: 8px; }
