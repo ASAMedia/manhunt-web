@@ -64,14 +64,16 @@ export default async function golive({ base, adminPass, supPass, check, section 
   await req('POST', '/api/client-error', { message: 'TypeError: x is undefined', source: '/play.js', line: 42 }, {
     noHeader: true, headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1' },
   });
-  const list = (await req('GET', '/api/admin/client-errors', undefined, SUP)).data;
+  // Fehlerberichte betreffen den ganzen Server – nur der Admin sieht sie (nicht Aufsicht oder Lehrkräfte-Konten)
+  check((await req('GET', '/api/admin/client-errors', undefined, SUP)).status === 403, 'Aufsicht sieht die Fehlerberichte nicht');
+  const list = (await req('GET', '/api/admin/client-errors', undefined, A)).data;
   const e = list[0];
   check(list.length === 1 && e.count === 2, 'gleicher Fehler wird gezählt statt doppelt gelistet', list);
   check(e.agent === 'Safari 17 / iOS', 'nur Browser und System statt ganzer Kennung', e.agent);
   const all = JSON.stringify(list);
   check(!all.includes(token) && !all.includes('Anna') && !all.includes('52.5') && !all.includes('?a=1'),
     'kein Token, Name, Standort oder Query im Bericht', all);
-  check((await req('GET', '/api/admin/client-errors')).status === 401, 'Liste nur für Spielleitung/Aufsicht');
+  check((await req('GET', '/api/admin/client-errors')).status === 401, 'Liste nur für den Admin');
   check((await req('DELETE', '/api/admin/client-errors', undefined, SUP)).status === 403, 'Aufsicht darf die Liste nicht leeren');
   await req('DELETE', '/api/admin/client-errors', undefined, A);
   check((await req('GET', '/api/admin/client-errors', undefined, A)).data.length === 0, 'Spielleitung leert die Liste');
@@ -153,7 +155,7 @@ export default async function golive({ base, adminPass, supPass, check, section 
   for (let i = 0; i < 12 && !limitedLogin; i++) {
     const res = await fetch(`${base}/api/admin/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `1.2.3.${i}, 10.9.8.7`, 'CF-Connecting-IP': `5.6.7.${i}` },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'manhunt', 'X-Forwarded-For': `1.2.3.${i}, 10.9.8.7`, 'CF-Connecting-IP': `5.6.7.${i}` },
       body: JSON.stringify({ password: 'falsch-falsch' }),
     });
     limitedLogin = res.status === 429;

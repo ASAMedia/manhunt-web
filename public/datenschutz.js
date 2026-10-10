@@ -1,17 +1,48 @@
-import { $, el, getConfig, store } from './common.js';
+import { $, api, el, getConfig, store } from './common.js';
 import { lang, applyI18n, langButton } from './i18n.js';
 
 // Datenschutz-Hinweise für Spieler und Eltern – Inhalt folgt der tatsächlichen Konfiguration des Servers.
 // Bei Änderungen am Verhalten der App: Text anpassen und STAND erhöhen.
-const STAND = { de: '08.10.2026', en: '8 October 2026' };
+const STAND = { de: '10.10.2026', en: '10 October 2026' };
 applyI18n();
 $('#langSlot').append(langButton());
 if (store.get('mh_token')) $('#back').href = '/play';
 if (history.length > 1) $('#back').addEventListener('click', (e) => { e.preventDefault(); history.back(); });
 
-function content(cfg) {
+// Gehört der Raum einer Lehrkraft mit eigenem Konto, nennt die Seite deren Schule (aus /api/privacy)
+async function roomPrivacy() {
+  const code = new URLSearchParams(location.search).get('code');
+  const token = store.get('mh_token');
+  if (!code && !token) return null;
+  try {
+    return await api('GET', `/api/privacy${code ? `?code=${encodeURIComponent(code)}` : ''}`, undefined, !code && token ? { 'X-Player-Token': token } : {});
+  } catch { return null; }
+}
+
+function content(cfg, rp) {
   const days = cfg.autoDeleteDays;
-  const { privacyController: controller, privacyContact: contact, privacyHosting: hosting } = cfg;
+  const ext = rp?.external ? rp : null;
+  const hosting = cfg.privacyHosting;
+  const controller = ext ? ext.controller || `${ext.org}` : cfg.privacyController;
+  const contact = ext ? ext.contact : cfg.privacyContact;
+  const operator = ext?.operator || rp?.operator || null;
+  // Wer den Server betreibt, wenn die Schule des Raums nicht selbst Betreiberin ist
+  const whereDe = ext
+    ? `Die Daten liegen auf dem Server des Plattform-Betreibers${operator ? ` (${operator})` : ''}, der sie im Auftrag der Schule verarbeitet (Auftragsverarbeiter)${hosting ? `; Hosting bei ${hosting}` : ''}.`
+    : hosting ? `Die Daten liegen auf dem Server der Spielleitung bei ${hosting} (Auftragsverarbeiter).` : 'Die Daten liegen auf dem Server der Spielleitung. Wird er bei einem Hosting-Anbieter betrieben, ist dieser Auftragsverarbeiter.';
+  const whereEn = ext
+    ? `The data is stored on the platform operator’s server${operator ? ` (${operator})` : ''}, which processes it on behalf of the school (processor)${hosting ? `; hosted by ${hosting}` : ''}.`
+    : hosting ? `The data is stored on the game master’s server at ${hosting} (processor).` : 'The data is stored on the game master’s server. If it is run by a hosting provider, that provider is a processor.';
+  const accountsDe = [
+    `Wer als Lehrkraft ein Konto anlegt, um eigene Spielräume zu verwalten: Name, Schule bzw. Organisation, E-Mail-Adresse, die Angaben für diese Datenschutz-Seite, das Passwort nur als nicht umkehrbarer Hash sowie Zeitpunkt der Registrierung und der letzten Anmeldung.`,
+    `Zweck: Zugang zur Spielleitung und Zuordnung der Räume (Art. 6 Abs. 1 lit. b DSGVO). Verantwortlich ist der Betreiber der Plattform${operator ? ` (${operator})` : ''}. Andere Lehrkräfte sehen das Konto nicht; der Admin sieht Name, Schule, E-Mail und die Räume.`,
+    'Gelöscht wird das Konto mit allen Räumen jederzeit selbst unter „Mein Konto“ oder durch den Admin; nicht freigeschaltete Registrierungen nach 14 Tagen.',
+  ];
+  const accountsEn = [
+    'If a teacher creates an account to manage their own game rooms: name, school or organisation, e-mail address, the details for this privacy notice, the password only as an irreversible hash, and the time of registration and last login.',
+    `Purpose: access to the game master area and assigning rooms (Art. 6(1)(b) GDPR). The controller is the platform operator${operator ? ` (${operator})` : ''}. Other teachers cannot see the account; the admin sees name, school, e-mail and the rooms.`,
+    'The account and all its rooms can be deleted at any time under “My account” or by the admin; registrations that are never approved are deleted after 14 days.',
+  ];
   if (lang === 'en') {
     return {
       title: 'Privacy – Manhunt',
@@ -43,7 +74,7 @@ function content(cfg) {
           'After the game, the game master can show the runners’ ping locations as a time-lapse with connecting lines, e.g. on a projector in front of the class. Blocked pings and hunters are not shown.',
         ]],
         ['Where and for how long?', [
-          hosting ? `The data is stored on the game master’s server at ${hosting} (processor).` : 'The data is stored on the game master’s server. If it is run by a hosting provider, that provider is a processor.',
+          whereEn,
           'Only your latest location is kept, plus the locations at ping times (until the next round starts) and at an emergency call.',
           days
             ? `The room including all data is deleted automatically ${days} days after the last activity (never during a running game), or earlier by the game master on request.`
@@ -58,6 +89,7 @@ function content(cfg) {
             : 'Map images come directly from OpenStreetMap (OpenStreetMap Foundation, United Kingdom), which sees your IP address in the process.',
           'Google Maps only opens when you tap “Route”. Google (USA) then receives the destination and calculates the route from your location – Google’s privacy policy applies.',
         ]],
+        ['Teacher accounts', accountsEn],
         ['Your rights', [
           'You (or your parents/guardians) can request information about your data (Art. 15 GDPR), have wrong data corrected (Art. 16), deleted (Art. 17) or restricted (Art. 18), and receive a copy (Art. 20) – from the game master or the contact above.',
           'The game master can remove you from the game at any time; your data is deleted completely together with the room – immediately on request.',
@@ -99,7 +131,7 @@ function content(cfg) {
         'Nach dem Spiel kann die Spielleitung die Ping-Standorte der Gejagten als Zeitraffer mit Verbindungslinien zeigen, z. B. am Beamer vor der Klasse. Blockierte Pings und Jäger werden dabei nicht gezeigt.',
       ]],
       ['Wo und wie lange?', [
-        hosting ? `Die Daten liegen auf dem Server der Spielleitung bei ${hosting} (Auftragsverarbeiter).` : 'Die Daten liegen auf dem Server der Spielleitung. Wird er bei einem Hosting-Anbieter betrieben, ist dieser Auftragsverarbeiter.',
+        whereDe,
         'Vom Standort wird nur der jeweils letzte gespeichert, dazu die Standorte zu den Ping-Zeitpunkten (bis zum Start der nächsten Runde) und beim Notruf.',
         days
           ? `Der Raum wird mit allen Daten ${days} Tage nach der letzten Aktivität automatisch gelöscht (laufende Spiele nie), auf Wunsch früher durch die Spielleitung.`
@@ -114,6 +146,7 @@ function content(cfg) {
           : 'Kartenbilder kommen direkt von OpenStreetMap (OpenStreetMap Foundation, Großbritannien); OpenStreetMap sieht dabei deine IP-Adresse.',
         'Google Maps öffnet sich nur, wenn du auf „Route“ tippst. Google (USA) erhält dann das Ziel und berechnet die Route von deinem Standort aus – es gelten die Datenschutzbestimmungen von Google.',
       ]],
+      ['Konten für Lehrkräfte', accountsDe],
       ['Deine Rechte', [
         'Du bzw. deine Sorgeberechtigten können Auskunft über deine Daten verlangen (Art. 15 DSGVO), falsche Daten berichtigen (Art. 16), Daten löschen (Art. 17) oder ihre Verarbeitung einschränken lassen (Art. 18) und eine Kopie erhalten (Art. 20) – bei der Spielleitung bzw. dem oben genannten Kontakt.',
         'Die Spielleitung kann dich jederzeit aus dem Spiel entfernen; vollständig gelöscht werden deine Daten mit dem Raum – auf Wunsch sofort.',
@@ -126,13 +159,13 @@ function content(cfg) {
   };
 }
 
-getConfig().then((cfg) => {
-  const c = content(cfg);
+Promise.all([getConfig(), roomPrivacy()]).then(([cfg, rp]) => {
+  const c = content(cfg, rp);
   document.title = c.title;
   $('#privacy').replaceChildren(
     el('h1', { text: c.title }),
     el('p', { class: 'lead', text: c.intro }),
-    ...c.sections.map(([heading, items]) => el('section', {},
+    ...c.sections.map(([heading, items]) => el('section', { id: heading === 'Konten für Lehrkräfte' || heading === 'Teacher accounts' ? 'konten' : null },
       el('h2', { text: heading }),
       el('ul', {}, items.map((text) => el('li', { text }))))));
 });

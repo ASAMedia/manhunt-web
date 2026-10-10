@@ -33,6 +33,8 @@ function defaultSettings() {
 
 // Räume aus älteren Versionen um neue Felder ergänzen
 function migrateRoom(room) {
+  room.ownerId ??= 'admin'; // Räume aus der Zeit vor den Lehrkräfte-Konten gehören dem Admin
+  room.supLink ??= null;
   room.emergencies ??= [];
   room.rounds ??= [];
   room.settings = { ...defaultSettings(), ...room.settings };
@@ -49,10 +51,12 @@ function newRoomCode() {
 }
 
 // template: optional ein bestehender Raum, dessen Einstellungen (Spielfeld, Treffpunkt, Regeln …) übernommen werden
-function createRoom(name, template = null) {
+function createRoom(name, template = null, ownerId = 'admin') {
   const room = {
     id: randomId(6),
     name,
+    ownerId,        // 'admin' oder die ID eines Lehrkräfte-Kontos
+    supLink: null,  // Aufsicht-Link { id, token, at } – nur für diesen Raum
     code: newRoomCode(),
     joinOpen: true,
     createdAt: Date.now(),

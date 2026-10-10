@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f6feb">
+  <title>Manhunt – Konto für Lehrkräfte</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="center-page start-page">
+  <main class="stack">
+    <header class="brand">
+      <img class="brand-logo" src="/icon.svg" alt="" width="76" height="76">
+      <h1 id="title">Konto für Lehrkräfte</h1>
+      <p class="tagline">Manhunt – Das Fangspiel durch die Stadt</p>
+    </header>
+
+    <!-- Registrierung (/registrieren) -->
+    <form id="regForm" class="card stack hidden">
+      <p class="small muted">Mit einem Konto legst du eigene Spielräume an. Andere Lehrkräfte sehen deine Räume nicht. Nach der Registrierung schaltet der Admin dein Konto frei.</p>
+      <label class="field">Name<input id="regName" maxlength="60" autocomplete="name" required></label>
+      <label class="field">Schule bzw. Organisation<input id="regOrg" maxlength="120" autocomplete="organization" required></label>
+      <label class="field">E-Mail<input id="regEmail" type="email" maxlength="200" autocomplete="email" required></label>
+      <label class="field">Passwort (mind. 10 Zeichen)<input id="regPw" type="password" minlength="10" autocomplete="new-password" required></label>
+      <label class="field">Passwort wiederholen<input id="regPw2" type="password" minlength="10" autocomplete="new-password" required></label>
+      <label class="check small"><input id="regPrivacy" type="checkbox" required> Ich habe die <a href="/datenschutz#konten" target="_blank" rel="noopener">Hinweise zum Datenschutz</a> gelesen (gespeichert werden Name, Schule, E-Mail und das Passwort nur als Hash).</label>
+      <button class="btn primary big" type="submit">Registrieren</button>
+      <p id="regErr" class="error"></p>
+    </form>
+
+    <!-- Neues Passwort über einen Link des Admins (/passwort#<schlüssel>) -->
+    <form id="resetForm" class="card stack hidden">
+      <p class="small muted">Lege ein neues Passwort für dein Konto fest. Der Link gilt nur einmal.</p>
+      <label class="field">Neues Passwort (mind. 10 Zeichen)<input id="resetPw" type="password" minlength="10" autocomplete="new-password" required></label>
+      <label class="field">Passwort wiederholen<input id="resetPw2" type="password" minlength="10" autocomplete="new-password" required></label>
+      <button class="btn primary big" type="submit">Passwort speichern</button>
+      <p id="resetErr" class="error"></p>
+    </form>
+
+    <div id="done" class="card stack hidden" role="status"></div>
+    <p class="small" style="text-align:center"><a href="/admin">Zur Anmeldung der Spielleitung</a> · <a class="muted" href="/datenschutz">Datenschutz</a></p>
+  </main>
+  <script type="module" src="/konto.js"></script>
+</body>
+</html>

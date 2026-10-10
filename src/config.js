@@ -35,6 +35,10 @@ const config = {
   PRIVACY_CONTROLLER: (env.PRIVACY_CONTROLLER || '').slice(0, 300),
   PRIVACY_CONTACT: (env.PRIVACY_CONTACT || '').slice(0, 300),
   PRIVACY_HOSTING: (env.PRIVACY_HOSTING || '').slice(0, 300),
+  // Betreiber der Plattform, wenn auch Lehrkräfte anderer Schulen eigene Konten haben (dann Auftragsverarbeiter)
+  PRIVACY_OPERATOR: (env.PRIVACY_OPERATOR || '').slice(0, 300),
+  // Lehrkräfte-Konten: höchstens so viele Räume je Konto (der Admin hat keine Grenze)
+  MAX_ROOMS_PER_USER: Number(env.MAX_ROOMS_PER_USER) || 20,
 
   PUBLIC_DIR: path.join(ROOT, 'public'),
   LEAFLET_DIR: path.join(path.dirname(require.resolve('leaflet/package.json')), 'dist'),

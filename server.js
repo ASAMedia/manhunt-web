@@ -13,7 +13,7 @@ const { serveTile, startTileCleanup } = require('./src/tiles');
 const { serveManifest, serveRobots, serveStatic } = require('./src/static');
 
 // Routen registrieren
-require('./src/routes/admin');
+require('./src/routes/admin'); // lädt auch ./src/accounts (Konten, Registrierung)
 require('./src/routes/player');
 require('./src/clientErrors');
 require('./src/setupCheck');
@@ -63,6 +63,7 @@ store.loadState(game.migrateRoom);
 game.autoDelete();
 store.startAutosave();
 game.startGameTimers();
+require('./src/accounts').startAccountCleanup();
 startRateLimitCleanup();
 startTileCleanup();
 

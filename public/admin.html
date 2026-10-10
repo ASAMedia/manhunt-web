@@ -21,11 +21,14 @@
         <p class="tagline">Manhunt – Das Fangspiel durch die Stadt</p>
       </header>
       <form id="loginForm" class="card stack">
-        <label class="field" for="password">Passwort (Spielleitung oder Aufsicht)</label>
+        <label class="field" for="email">E-Mail (Lehrkräfte-Konto)</label>
+        <input id="email" type="email" autocomplete="username" placeholder="leer lassen beim Admin- oder Aufsicht-Passwort">
+        <label class="field" for="password">Passwort</label>
         <input id="password" type="password" autocomplete="current-password" required>
         <button class="btn primary big" type="submit">Anmelden</button>
         <p id="loginErr" class="error"></p>
       </form>
+      <p class="small" style="text-align:center">Noch kein Konto? <a href="/registrieren">Als Lehrkraft registrieren</a></p>
       <p class="small" style="text-align:center"><a class="muted" href="/">Zur Startseite für Spieler</a></p>
     </main>
   </div>
@@ -41,7 +44,10 @@
       <div class="admin-head">
         <h1 style="margin:0">Räume</h1>
         <div class="row">
+          <span id="whoami" class="small muted"></span>
           <span class="badge supervisor-only" title="Du bist als Aufsicht angemeldet: ansehen, Notfälle bearbeiten, Nachrichten senden">Aufsicht</span>
+          <button id="accountsBtn" class="btn sm superadmin-only" type="button">Konten <span id="pendingBadge" class="tab-count warn hidden"></span></button>
+          <button id="meBtn" class="btn sm manager-only" type="button">Mein Konto</button>
           <button id="alarmTest" class="btn sm" type="button" title="Alarmton abspielen – so klingt ein Notfall. Lautstärke prüfen!">🔊 Alarmton testen</button>
           <a class="btn sm" href="/hilfe" target="_blank" rel="noopener">Hilfe</a>
           <button id="logoutBtn" class="btn sm" type="button">Abmelden</button>
@@ -58,17 +64,21 @@
         <button class="btn primary" type="submit">Raum erstellen</button>
       </form>
       <!-- Einrichtungs-Check (nur Spielleitung): ist der Server bereit für den Einsatz? -->
-      <details id="setupCheck" class="card admin-only setup-check hidden" style="margin-bottom:1rem">
+      <details id="setupCheck" class="card admin-only superadmin-only setup-check hidden" style="margin-bottom:1rem">
         <summary><strong id="setupTitle">Einrichtung wird geprüft …</strong></summary>
         <p class="small muted">Prüft, ob Server und Proxy bereit für den Einsatz mit Schülern sind. Punkte mit ⚠ vor der Fahrt erledigen.</p>
         <ul id="setupList" class="list setup-list"></ul>
         <button id="setupRecheck" class="btn sm" type="button">Erneut prüfen</button>
       </details>
+      <div id="roomFilter" class="row superadmin-only room-filter" role="group" aria-label="Welche Räume?">
+        <button class="btn sm" type="button" data-filter="all">Alle Räume</button>
+        <button class="btn sm" type="button" data-filter="mine">Meine Räume</button>
+      </div>
       <div id="roomGrid" class="room-grid"></div>
       <p id="noRooms" class="muted hidden">Noch keine Räume. Erstelle oben den ersten.</p>
 
       <!-- Skriptfehler von Handys (ohne Namen/Standorte) – nur sichtbar, wenn es welche gibt -->
-      <details id="clientErrors" class="card hidden" style="margin-top:1rem">
+      <details id="clientErrors" class="card superadmin-only hidden" style="margin-top:1rem">
         <summary><strong id="clientErrorsTitle">Fehlerberichte von Handys</strong></summary>
         <p class="small muted">Programmfehler, die auf Handys aufgetreten sind – ohne Namen, Standorte oder Spieler-Links. Hilft beim Beheben; nach einem Neustart des Servers ist die Liste leer.</p>
         <ul id="clientErrorList" class="list client-errors"></ul>
@@ -84,6 +94,7 @@
           <h1 id="rName" style="margin:0"></h1>
           <button id="renameRoom" class="btn sm admin-only mission-hide" type="button">Umbenennen</button>
           <span id="rStatus" class="badge"></span>
+          <span id="rOwner" class="badge owner-badge hidden"></span>
           <button id="viewToggle" class="btn sm hidden" type="button"></button>
           <span class="badge supervisor-only">Aufsicht</span>
           <a class="btn sm" href="/hilfe" target="_blank" rel="noopener">Hilfe</a>
@@ -119,6 +130,7 @@
                   <button id="printSheet" class="btn sm" type="button">Druckblatt</button>
                   <button id="printCards" class="btn sm" type="button" title="Karten für jede Gruppe: Treffpunkt, Nummern, was tun, wenn die App ausfällt">Notfallkarten</button>
                   <button id="joinToggle" class="btn sm admin-only" type="button"></button>
+                  <button id="supLinkBtn" class="btn sm admin-only" type="button" title="Zugang für eine zweite Lehrkraft nur zu diesem Raum – ohne Konto">Aufsicht-Link</button>
                 </div>
               </div>
             </div>
@@ -204,6 +216,11 @@
                 <span id="setMsg" class="small muted"></span>
               </div>
             </form>
+            <div id="ownerBox" class="row superadmin-only owner-box">
+              <label class="small muted" for="ownerSel">Raum gehört</label>
+              <select id="ownerSel"></select>
+              <button id="ownerSave" class="btn sm" type="button">Übergeben</button>
+            </div>
           </div>
 
           <div class="card stack" data-tab="spiel">

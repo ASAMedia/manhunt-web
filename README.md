@@ -155,6 +155,26 @@ Caddy auf dem Host (`reverse_proxy 127.0.0.1:3000`), Traefik und Nginx Proxy Man
 
 **Tipp:** Erst allein mit dem **Probespiel** ausprobieren, dann einmal mit 3–4 echten Handys – inklusive iPhone. Die Kurzanleitung für Kolleg:innen steht unter `/hilfe`.
 
+## Mehrere Lehrkräfte (Konten)
+
+Neben dem Admin (`ADMIN_PASSWORD`) können Lehrkräfte – auch anderer Schulen – eigene Konten haben:
+
+| | Admin | Lehrkraft (Konto) | Aufsicht-Passwort | Aufsicht-Link |
+|---|---|---|---|---|
+| Räume sehen | **alle** (fremde mit Inhaber) | nur eigene | Räume des Admins | genau einen Raum |
+| Räume steuern (starten, einstellen, löschen) | alle | eigene | – | – |
+| Notfälle, Warnungen mit Ton | nur aus **eigenen** Räumen | eigene | Räume des Admins | dieser Raum |
+| Konten freigeben, sperren, löschen, Räume übergeben | ✓ | – | – | – |
+| Einrichtungs-Check, Fehlerberichte | ✓ | – | – | – |
+
+- **Registrierung:** `/registrieren` (Name, Schule, E-Mail, Passwort). Das Konto ist erst nach der Freigabe durch den Admin nutzbar (Räume → **Konten**); nicht freigegebene Registrierungen werden nach 14 Tagen gelöscht. Die Registrierung lässt sich dort auch schließen.
+- **Anmeldung:** `/admin` mit E-Mail und Passwort. Admin und Aufsicht lassen die E-Mail leer.
+- **Passwort vergessen:** Der Admin erzeugt unter **Konten** einen einmaligen Link (48 h gültig) und gibt ihn selbst weiter – der Server verschickt keine Mails.
+- **Aufsicht-Link:** Im Raum unter „Einladen“ → **Aufsicht-Link** (QR-Code): Kolleg:innen sehen ohne Konto genau diesen Raum, bekommen dessen Alarme und senden Nachrichten. „Neuer Link“ bzw. „Zurückziehen“ meldet sie sofort ab.
+- **Mein Konto:** Name, Schule, die **Angaben für die Datenschutz-Seite** (verantwortliche Schule, Datenschutz-Kontakt), Passwort ändern, Konto mit allen Räumen löschen.
+- **Datenschutz:** Spieler sehen auf `/datenschutz` die Schule, deren Raum sie beigetreten sind. Für andere Schulen ist der Betreiber der Plattform Auftragsverarbeiter – `PRIVACY_OPERATOR` setzen und mit jeder Schule einen Vertrag zur Auftragsverarbeitung schließen.
+- Passwörter werden mit scrypt gehasht; Passwortwechsel, Sperren und Löschen melden alle Geräte des Kontos sofort ab. Je Konto höchstens `MAX_ROOMS_PER_USER` Räume.
+
 ## Wer sieht was?
 
 | | Spielleitung / Aufsicht | Jäger | Gejagte |
@@ -193,6 +213,8 @@ Caddy auf dem Host (`reverse_proxy 127.0.0.1:3000`), Traefik und Nginx Proxy Man
 | `PRIVACY_CONTROLLER` | Verantwortliche Schule (Name, Anschrift) für die Datenschutz-Seite |
 | `PRIVACY_CONTACT` | Datenschutz-Kontakt (Datenschutzbeauftragte/r der Schule) |
 | `PRIVACY_HOSTING` | Hosting-Anbieter und Standort des Servers (Auftragsverarbeiter), leer bei eigenem Gerät |
+| `PRIVACY_OPERATOR` | Betreiber der Plattform (Name, Anschrift) – für die Datenschutz-Seite, wenn Lehrkräfte anderer Schulen Konten haben |
+| `MAX_ROOMS_PER_USER` | höchstens so viele Räume je Lehrkräfte-Konto (Standard 20) |
 | `AUTO_DELETE_DAYS` | Tage bis zum automatischen Löschen (Standard 7, `0` = nie) |
 | `TILE_PROXY` | Karten über den Server zwischenspeichern (Standard `1`) |
 | `TILE_CACHE_MAX_MB` | Obergrenze für den Kartenspeicher (Standard 1000 MB) |

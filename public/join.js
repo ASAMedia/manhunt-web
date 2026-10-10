@@ -5,6 +5,8 @@ applyI18n();
 $('#langSlot').append(langButton());
 
 const code = location.pathname.split('/').pop().toUpperCase();
+// Datenschutz-Seite mit dem Raum aufrufen – sie nennt dann die Schule, die diesen Raum veranstaltet
+for (const a of document.querySelectorAll('a[href="/datenschutz"]')) a.href = `/datenschutz?code=${encodeURIComponent(code)}`;
 
 async function init() {
   // Wer den QR-Code erneut scannt (z. B. nach versehentlich geschlossenem Tab), landet wieder in seinem

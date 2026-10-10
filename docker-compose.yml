@@ -43,6 +43,8 @@ services:
       PRIVACY_CONTROLLER: ${PRIVACY_CONTROLLER:-}
       PRIVACY_CONTACT: ${PRIVACY_CONTACT:-}
       PRIVACY_HOSTING: ${PRIVACY_HOSTING:-}
+      PRIVACY_OPERATOR: ${PRIVACY_OPERATOR:-}
+      MAX_ROOMS_PER_USER: ${MAX_ROOMS_PER_USER:-20}
       TILE_PROXY: ${TILE_PROXY:-1}
       TILE_CACHE_MAX_MB: ${TILE_CACHE_MAX_MB:-1000}
       # Die App ist nur über den Proxy (Caddy, Tunnel, eigener Reverse Proxy) erreichbar –

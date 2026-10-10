@@ -4,7 +4,7 @@
 // Bewusst ohne Namen, Standorte oder Spieler-Token – nur, was zum Beheben des Fehlers nötig ist.
 
 const { cleanText, clampInt } = require('./util');
-const { route, readJson, rateLimit, requireAdmin, requireStaff } = require('./http');
+const { route, readJson, rateLimit, requireSuperAdmin } = require('./http');
 
 const MAX_REPORTS = 100;
 const reports = []; // nur im Speicher – nach einem Neustart leer
@@ -55,12 +55,12 @@ route('POST', '/api/client-error', async (req) => {
 });
 
 route('GET', '/api/admin/client-errors', (req) => {
-  requireStaff(req);
+  requireSuperAdmin(req); // Programmfehler betreffen den Server-Betrieb – nur für den Admin
   return [...reports].sort((a, b) => b.lastAt - a.lastAt);
 });
 
 route('DELETE', '/api/admin/client-errors', (req) => {
-  requireAdmin(req);
+  requireSuperAdmin(req);
   reports.length = 0;
   return { ok: true };
 });

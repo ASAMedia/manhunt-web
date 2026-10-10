@@ -14,11 +14,18 @@ let clockOffset = 0;
 let pollTimer = null;
 let loggedIn = false;
 let role = 'admin';       // 'admin' = Spielleitung, 'supervisor' = Aufsicht (nur ansehen, Notfälle, Nachrichten)
+// Konto-Art: 'admin' (alle Räume, Konten) · 'manager' (Lehrkräfte-Konto, eigene Räume) · 'supervisor' (Aufsicht-Passwort)
+// · 'roomsup' (Aufsicht-Link eines Raums)
+let account = { kind: 'admin', name: 'Admin' };
 const isAdmin = () => role === 'admin';
+const isSuper = () => account.kind === 'admin';
 
-function applyRole(r) {
+function applyRole(r, acc) {
   role = r || 'admin';
+  account = acc || { kind: role === 'admin' ? 'admin' : 'supervisor', name: role === 'admin' ? 'Admin' : 'Aufsicht' };
   document.body.classList.toggle('role-supervisor', role === 'supervisor');
+  for (const k of ['admin', 'manager', 'supervisor', 'roomsup']) document.body.classList.toggle(`kind-${k}`, account.kind === k);
+  $('#whoami').textContent = account.kind === 'manager' ? account.name : '';
 }
 
 let map = null;
@@ -79,7 +86,26 @@ async function boot() {
   cfg = await getConfig();
   $('#appFooter').textContent = `Manhunt ${cfg.version || ''}${cfg.build ? ` · Build ${cfg.build}` : ''}`;
   const s = await api('GET', '/api/admin/session');
-  if (s.admin) { applyRole(s.role); route(); } else showLogin();
+  // Aufsicht-Link (/admin#aufsicht=<schlüssel>): dieses Gerät als Aufsicht für genau einen Raum anmelden
+  const sup = location.hash.match(/^#aufsicht=([\w-]{16,})$/);
+  if (sup) {
+    history.replaceState(null, '', '/admin'); // Schlüssel nicht in der Adresszeile stehen lassen
+    const keep = s.admin && s.role === 'admin'
+      && !confirm('Du bist schon als Spielleitung angemeldet. Trotzdem mit dem Aufsicht-Link fortfahren? Du wirst dabei abgemeldet.');
+    if (!keep) {
+      try {
+        const r = await api('POST', '/api/admin/sup-login', { token: sup[1] });
+        applyRole(r.role, r.account);
+        history.replaceState(null, '', `/admin#room=${r.roomId}`);
+        return route();
+      } catch (e) {
+        showLogin();
+        $('#loginErr').textContent = e.message;
+        return;
+      }
+    }
+  }
+  if (s.admin) { applyRole(s.role, s.account); route(); } else showLogin();
 }
 
 function showLogin() {
@@ -98,9 +124,9 @@ $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#loginErr').textContent = '';
   try {
-    const s = await api('POST', '/api/admin/login', { password: $('#password').value });
+    const s = await api('POST', '/api/admin/login', { email: $('#email').value.trim() || undefined, password: $('#password').value });
     $('#password').value = '';
-    applyRole(s.role);
+    applyRole(s.role, s.account);
     route();
   } catch (err) {
     $('#loginErr').textContent = err.message;
@@ -162,6 +188,7 @@ async function pollAlerts() {
     if (!Array.isArray(a?.emergencies) || !Array.isArray(a?.warnings)) throw new Error('Ungültige Antwort');
     alerts = a;
     alertFails = 0;
+    renderPendingBadge();
   } catch (e) {
     if (e.status === 401) { alertPolling = false; alertInFlightSince = 0; return showLogin(); }
     alertFails++;
@@ -389,15 +416,20 @@ async function loadList() {
     const rooms = await api('GET', '/api/admin/rooms');
     $('#noRooms').classList.toggle('hidden', rooms.length > 0);
     renderCopySelect(rooms);
-    loadClientErrors();
+    if (isSuper()) loadClientErrors();
+    // Admin: alle Räume oder nur die eigenen; fremde Räume zeigen ihren Inhaber
+    for (const b of document.querySelectorAll('#roomFilter [data-filter]')) b.classList.toggle('primary', b.dataset.filter === roomFilter);
+    const shown = isSuper() && roomFilter === 'mine' ? rooms.filter((r) => r.own) : rooms;
+    $('#noRooms').classList.toggle('hidden', shown.length > 0);
     // Raumkarten: Farbstreifen je Status (Notfall rot), große Zahlen, Hinweise als Abzeichen
     const stat = (n, label, cls = '') => el('div', { class: `room-stat ${cls}` }, el('strong', { text: String(n) }), el('span', { text: label }));
-    swapIfChanged($('#roomGrid'), rooms.map((r) => el('button', {
+    swapIfChanged($('#roomGrid'), shown.map((r) => el('button', {
       class: `card room-card status-${r.status}${r.emergencies ? ' has-sos' : ''}`, type: 'button', onclick: () => { location.hash = `room=${r.id}`; },
     },
     el('div', { class: 'room-card-head' },
       el('strong', { class: 'room-name', text: r.name }),
       el('span', { class: `badge ${r.status === 'running' ? 'running' : ''}`, text: STATUS_LABEL[r.status] })),
+    isSuper() && !r.own ? el('div', { class: 'room-owner small', text: `👤 ${r.ownerName}` }) : null,
     r.emergencies || r.warnings || r.bots || !r.joinOpen ? el('div', { class: 'row room-badges' },
       r.emergencies ? el('span', { class: 'badge danger', text: '🚨 Notfall' }) : null,
       r.warnings ? el('span', { class: 'badge warn', text: `⚠ ${r.warnings} ${r.warnings === 1 ? 'Warnung' : 'Warnungen'}` }) : null,
@@ -415,6 +447,12 @@ async function loadList() {
     clearTimeout(pollTimer);
     pollTimer = setTimeout(loadList, 5000);
   }
+}
+
+// Admin: Filter „Alle Räume / Meine Räume“ (pro Gerät gemerkt)
+let roomFilter = store.get('mh_room_filter') === 'mine' ? 'mine' : 'all';
+for (const b of document.querySelectorAll('#roomFilter [data-filter]')) {
+  b.addEventListener('click', () => { roomFilter = b.dataset.filter; store.set('mh_room_filter', roomFilter); loadList(); });
 }
 
 $('#newRoomForm').addEventListener('submit', async (e) => {
@@ -457,7 +495,7 @@ const CHECK_ICON = { ok: '✓', warn: '!', info: 'i' };
 
 async function loadSetupCheck() {
   const box = $('#setupCheck');
-  if (!isAdmin()) { box.classList.add('hidden'); return; }
+  if (!isSuper()) { box.classList.add('hidden'); return; }
   let data;
   try { data = await api('GET', '/api/admin/setup-check'); } catch { return; }
   const checks = [...data.checks];
@@ -633,6 +671,14 @@ function renderRoom() {
   const st = $('#rStatus');
   st.className = `badge ${R.status === 'running' ? 'running' : ''}`;
   st.textContent = STATUS_LABEL[R.status];
+  // Admin in einem fremden Raum: zeigen, wem er gehört (Alarme gehen an diese Lehrkraft, nicht an den Admin)
+  const foreign = isSuper() && R.ownerId !== 'admin';
+  $('#rOwner').classList.toggle('hidden', !foreign);
+  $('#rOwner').textContent = foreign ? `Raum von ${R.ownerName}` : '';
+  $('#rOwner').title = foreign ? 'Notfälle und Warnungen dieses Raums bekommt die Lehrkraft, nicht der Admin' : '';
+  if (isSuper()) renderOwnerSelect();
+  // Den Aufsicht-Link eines fremden Raums verwaltet die Lehrkraft (der Admin sieht ihn nicht)
+  $('#supLinkBtn').classList.toggle('hidden', foreign);
   renderTimers();
   renderControls();
   renderInvite();
@@ -1370,5 +1416,223 @@ function fitAll() {
 }
 
 $('#fitAll').addEventListener('click', () => { if (R) fitAll(); });
+
+// ---------------------------------------------------------------------------
+// Aufsicht-Link: Zugang für eine zweite Lehrkraft nur zu diesem Raum (ohne Konto)
+// ---------------------------------------------------------------------------
+
+async function showSupLink() {
+  if (!R.supToken && !(await act('POST', '/suplink'))) return;
+  const url = `${baseUrl()}/admin#aufsicht=${R.supToken}`;
+  const img = el('img', { alt: 'QR-Code: Aufsicht-Link' });
+  secretQr(url).then((src) => { img.src = src; }).catch(handleError);
+  const b = (text, onclick, cls = '') => el('button', { class: `btn sm ${cls}`, type: 'button', onclick, text });
+  openOverlay(el('div', { class: 'card stack qr-full' },
+    el('h2', { text: 'Aufsicht-Link' }),
+    el('p', { class: 'small', text: `Für Kolleg:innen: Wer diesen Code scannt, sieht nur den Raum „${R.name}“, bekommt dessen Notfälle und Warnungen und kann Nachrichten senden – aber nichts starten, einstellen oder löschen. Ein Konto ist nicht nötig.` }),
+    img,
+    el('div', { class: 'join-url', text: url }),
+    el('div', { class: 'row', style: 'justify-content:center' },
+      b('Link kopieren', async () => {
+        try { await navigator.clipboard.writeText(url); toast('Aufsicht-Link kopiert'); } catch { toast('Kopieren nicht möglich', true); }
+      }),
+      b('Neuen Link erzeugen', async () => {
+        if (!confirm('Neuen Aufsicht-Link erzeugen? Wer den bisherigen benutzt, wird abgemeldet.')) return;
+        if (await act('POST', '/suplink')) showSupLink();
+      }),
+      b('Zurückziehen', async () => {
+        if (!confirm('Aufsicht-Link zurückziehen? Wer ihn benutzt, wird sofort abgemeldet.')) return;
+        if (await act('DELETE', '/suplink')) { closeOverlay(); toast('Aufsicht-Link zurückgezogen'); }
+      }, 'danger')),
+    el('p', { class: 'small muted', text: 'Wie ein Schlüssel: nur an Kolleg:innen weitergeben. „Neuer Link“ und „Zurückziehen“ melden alle Geräte ab, die den bisherigen Link benutzen.' }),
+    el('button', { class: 'btn primary', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
+}
+$('#supLinkBtn').addEventListener('click', showSupLink);
+
+// ---------------------------------------------------------------------------
+// Konten (nur Admin): Registrierungen freigeben, sperren, Passwort-Link, löschen
+// ---------------------------------------------------------------------------
+
+const STATUS_TEXT = { pending: 'wartet auf Freigabe', active: 'aktiv', disabled: 'gesperrt' };
+let usersCache = [];
+
+function renderPendingBadge() {
+  const n = alerts.pendingAccounts || 0;
+  const badge = $('#pendingBadge');
+  badge.textContent = n ? String(n) : '';
+  badge.classList.toggle('hidden', !n);
+}
+
+async function showAccounts() {
+  let data;
+  try { data = await api('GET', '/api/admin/users'); } catch (e) { return handleError(e); }
+  usersCache = data.users;
+  const userAct = async (method, path, body, msg) => {
+    try {
+      const r = await api(method, `/api/admin/users/${path}`, body);
+      if (msg) toast(msg);
+      return r || true;
+    } catch (e) { handleError(e); return null; }
+  };
+  const b = (text, onclick, cls = '') => el('button', { class: `btn sm ${cls}`, type: 'button', onclick, text });
+  const item = (u) => {
+    const actions = [];
+    if (u.status === 'pending') {
+      actions.push(b('Freigeben', async () => { if (await userAct('PATCH', u.id, { status: 'active' }, `${u.name} freigegeben`)) showAccounts(); }, 'primary'));
+      actions.push(b('Ablehnen', async () => {
+        if (confirm(`Registrierung von ${u.name} ablehnen und löschen?`) && await userAct('DELETE', u.id, undefined, 'Registrierung gelöscht')) showAccounts();
+      }));
+    } else {
+      if (u.status === 'active') {
+        actions.push(b('Passwort-Link', async () => {
+          const r = await userAct('POST', `${u.id}/reset`);
+          if (!r) return;
+          const link = `${baseUrl()}${r.path}`;
+          linkBox.replaceChildren(
+            el('strong', { text: `Passwort-Link für ${u.name}` }),
+            el('div', { class: 'join-url', text: link }),
+            el('div', { class: 'small muted', text: `Gilt 48 Stunden und nur einmal. Selbst weitergeben, z. B. per E-Mail an ${u.email}.` }),
+            b('Link kopieren', async () => {
+              try { await navigator.clipboard.writeText(link); toast('Link kopiert'); } catch { toast('Kopieren nicht möglich', true); }
+            }));
+          linkBox.classList.remove('hidden');
+        }));
+        actions.push(b('Sperren', async () => {
+          if (confirm(`${u.name} sperren? Angemeldete Geräte werden sofort abgemeldet, die Räume bleiben.`) && await userAct('PATCH', u.id, { status: 'disabled' }, 'Konto gesperrt')) showAccounts();
+        }));
+      } else {
+        actions.push(b('Entsperren', async () => { if (await userAct('PATCH', u.id, { status: 'active' }, 'Konto entsperrt')) showAccounts(); }));
+      }
+      actions.push(holdButton({
+        text: 'Löschen (gedrückt halten)', cls: 'danger sm', title: `Konto von ${u.name} samt ${u.rooms} Räumen löschen – 2 Sekunden gedrückt halten`,
+        onConfirm: async () => { if (await userAct('DELETE', u.id, undefined, `Konto von ${u.name} gelöscht`)) showAccounts(); },
+      }));
+    }
+    return el('li', { class: `account-item ${u.status}` },
+      el('div', { class: 'account-head' },
+        el('strong', { text: u.name }),
+        el('span', { class: `badge ${u.status === 'active' ? 'running' : u.status === 'pending' ? 'warn' : ''}`, text: STATUS_TEXT[u.status] })),
+      el('div', { class: 'small', text: `${u.org} · ${u.email}` }),
+      el('div', {
+        class: 'small muted',
+        text: [
+          `registriert ${fmtDate(u.createdAt)}`,
+          u.lastLoginAt ? `zuletzt angemeldet ${fmtDate(u.lastLoginAt)}` : 'noch nie angemeldet',
+          `${u.rooms} ${u.rooms === 1 ? 'Raum' : 'Räume'}`,
+          u.privacySet ? 'Datenschutz-Angaben ✓' : u.status === 'active' ? 'Datenschutz-Angaben fehlen' : null,
+        ].filter(Boolean).join(' · '),
+      }),
+      el('div', { class: 'row' }, actions));
+  };
+  const linkBox = el('div', { class: 'link-box stack hidden' });
+  const toggle = el('input', {
+    type: 'checkbox', checked: data.registrationOpen,
+    onchange: async (e) => {
+      try {
+        await api('PATCH', '/api/admin/platform', { registrationOpen: e.target.checked });
+        toast(e.target.checked ? 'Registrierung geöffnet' : 'Registrierung geschlossen');
+      } catch (err) { handleError(err); e.target.checked = !e.target.checked; }
+    },
+  });
+  const pending = data.users.filter((u) => u.status === 'pending');
+  const others = data.users.filter((u) => u.status !== 'pending');
+  openOverlay(el('div', { class: 'card stack accounts-card' },
+    el('h2', { text: 'Konten der Lehrkräfte' }),
+    el('label', { class: 'check' }, toggle, ` Registrierung offen – unter ${baseUrl()}/registrieren`),
+    el('p', { class: 'small muted', text: 'Lehrkräfte sehen nur ihre eigenen Räume und bekommen nur deren Alarme. Du siehst alle Räume, bekommst aber keine Alarme aus fremden Räumen. Nicht freigegebene Registrierungen werden nach 14 Tagen gelöscht.' }),
+    linkBox,
+    pending.length ? el('h3', { text: `Warten auf Freigabe (${pending.length})` }) : null,
+    pending.length ? el('ul', { class: 'list account-list' }, pending.map(item)) : null,
+    el('h3', { text: `Konten (${others.length})` }),
+    others.length ? el('ul', { class: 'list account-list' }, others.map(item)) : el('p', { class: 'small muted', text: 'Noch keine freigegebenen Konten.' }),
+    el('button', { class: 'btn primary', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
+}
+$('#accountsBtn').addEventListener('click', showAccounts);
+
+// Raum einem anderen Konto übergeben (nur Admin, Einstellungen)
+async function renderOwnerSelect() {
+  if (!usersCache.length) {
+    try { usersCache = (await api('GET', '/api/admin/users')).users; } catch { return; }
+  }
+  const sel = $('#ownerSel');
+  if (document.activeElement === sel) return;
+  const opts = [el('option', { value: 'admin', text: 'Admin (dir)' }),
+    ...usersCache.filter((u) => u.status === 'active').map((u) => el('option', { value: u.id, text: `${u.name} (${u.org})` }))];
+  swapIfChanged(sel, opts);
+  sel.value = R.ownerId;
+}
+$('#ownerSave').addEventListener('click', async () => {
+  const ownerId = $('#ownerSel').value;
+  if (ownerId === R.ownerId) return;
+  if (!confirm(`Raum „${R.name}“ übergeben? Notfälle und Warnungen gehen dann an das neue Konto; ein Aufsicht-Link wird ungültig.`)) return;
+  try {
+    await api('POST', `/api/admin/rooms/${roomId}/owner`, { ownerId });
+    toast('Raum übergeben');
+    loadRoom();
+  } catch (e) { handleError(e); }
+});
+
+// ---------------------------------------------------------------------------
+// Mein Konto (Lehrkräfte): Angaben, Datenschutz-Angaben, Passwort, Konto löschen
+// ---------------------------------------------------------------------------
+
+async function showMyAccount() {
+  let me;
+  try { me = await api('GET', '/api/account/me'); } catch (e) { return handleError(e); }
+  const input = (label, value, attrs = {}) => {
+    const inp = el('input', { value, ...attrs });
+    return [el('label', { class: 'field' }, label, inp), inp];
+  };
+  const [nameL, nameI] = input('Name', me.name, { maxlength: 60 });
+  const [orgL, orgI] = input('Schule bzw. Organisation', me.org, { maxlength: 120 });
+  const [ctrlL, ctrlI] = input('Verantwortliche Stelle (Name und Anschrift der Schule)', me.privacyController, { maxlength: 300, placeholder: 'z. B. Gymnasium A, Schulweg 1, 99423 Weimar' });
+  const [contL, contI] = input('Datenschutz-Kontakt', me.privacyContact, { maxlength: 300, placeholder: 'z. B. Datenschutzbeauftragte:r, E-Mail' });
+  const [curL, curI] = input('Bisheriges Passwort', '', { type: 'password', autocomplete: 'current-password' });
+  const [nextL, nextI] = input('Neues Passwort (mind. 10 Zeichen)', '', { type: 'password', autocomplete: 'new-password' });
+  const [delL, delI] = input('Passwort zur Bestätigung', '', { type: 'password', autocomplete: 'current-password' });
+  const save = async () => {
+    try {
+      const r = await api('PATCH', '/api/account/me', { name: nameI.value, org: orgI.value, privacyController: ctrlI.value, privacyContact: contI.value });
+      account.name = r.name;
+      $('#whoami').textContent = r.name;
+      toast('Angaben gespeichert');
+    } catch (e) { handleError(e); }
+  };
+  const changePw = async () => {
+    try {
+      await api('POST', '/api/account/password', { current: curI.value, next: nextI.value });
+      curI.value = '';
+      nextI.value = '';
+      toast('Passwort geändert – andere Geräte sind abgemeldet');
+    } catch (e) { handleError(e); }
+  };
+  openOverlay(el('div', { class: 'card stack accounts-card' },
+    el('h2', { text: 'Mein Konto' }),
+    el('p', { class: 'small muted', text: `${me.email} · ${me.rooms} von ${me.maxRooms} Räumen` }),
+    nameL, orgL,
+    el('h3', { text: 'Datenschutz-Seite für deine Spieler' }),
+    el('p', { class: 'small muted', text: 'Diese Angaben stehen auf der Datenschutz-Seite, die Schüler in deinen Räumen sehen. Ohne Angabe steht dort deine Schule bzw. Organisation.' }),
+    ctrlL, contL,
+    el('button', { class: 'btn primary', type: 'button', onclick: save, text: 'Angaben speichern' }),
+    el('h3', { text: 'Passwort ändern' }),
+    curL, nextL,
+    el('button', { class: 'btn', type: 'button', onclick: changePw, text: 'Passwort ändern' }),
+    el('h3', { text: 'Konto löschen' }),
+    el('p', { class: 'small muted', text: 'Löscht dein Konto und alle deine Räume mit allen Spieldaten – sofort und endgültig.' }),
+    delL,
+    holdButton({
+      text: 'Konto löschen (3 s gedrückt halten)', holdText: 'Weiter halten … Konto wird gelöscht', ms: 3000, cls: 'danger',
+      onConfirm: async () => {
+        try {
+          await api('DELETE', '/api/account/me', { password: delI.value });
+          closeOverlay();
+          showLogin();
+          toast('Dein Konto und deine Räume sind gelöscht');
+        } catch (e) { handleError(e); }
+      },
+    }),
+    el('button', { class: 'btn primary', type: 'button', onclick: closeOverlay, text: 'Schließen' })));
+}
+$('#meBtn').addEventListener('click', showMyAccount);
 
 boot().catch(handleError);

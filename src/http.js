@@ -98,8 +98,18 @@ const rateLimit = (req, key, max, windowMs) => limitKey(`${key}:${ipKey(clientIp
 
 // Wie viele Treffer hat ein Schlüssel gerade (ohne mitzuzählen)?
 function countOf(req, key) {
-  const b = buckets.get(`${key}:${ipKey(clientIp(req))}`);
+  return keyCount(`${key}:${ipKey(clientIp(req))}`);
+}
+// Wie oft wurde unter einem beliebigen Schlüssel (z. B. einem Konto) gezählt?
+function keyCount(k) {
+  const b = buckets.get(k);
   return b && b.reset >= Date.now() ? b.n : 0;
+}
+
+// Anfragen ohne Anmeldung, die etwas bewirken (Anmelden, Registrieren, Passwort-Link): nur aus der eigenen Seite.
+// Ein Formular einer fremden Website kann diesen Header nicht setzen (Schutz gegen Login-CSRF und Massen-Registrierung).
+function requireOwnPage(req) {
+  if (req.headers['x-requested-with'] !== 'manhunt') throw new HttpError(403, 'Ungültige Anfrage');
 }
 
 function startRateLimitCleanup() {
@@ -127,13 +137,44 @@ function safeEqual(a, b) {
 // wenn es jemand kopiert hat. Nur im Arbeitsspeicher; nach einem Neustart gilt wieder die Ablaufzeit (max. 12 h).
 const revoked = new Map();
 
-// Rolle aus dem signierten Sitzungs-Cookie: 'admin' (Spielleitung), 'supervisor' (Aufsicht) oder null
-function sessionRole(req) {
-  const [role, exp, sig] = (parseCookies(req).mh_admin || '').split('.');
-  if (!['admin', 'supervisor'].includes(role) || !sig || !(Number(exp) > Date.now())) return null;
-  if (role === 'supervisor' && !SUPERVISOR_PASSWORD) return null;
-  if (revoked.has(sig)) return null;
-  return safeEqual(sig, sign(`${role}.${exp}`)) ? role : null;
+// Wer ist angemeldet? Das signierte Cookie enthält einen „Inhaber“:
+//   admin              – Admin (ADMIN_PASSWORD): alle Räume, Konten verwalten
+//   supervisor         – Aufsicht per SUPERVISOR_PASSWORD: Räume des Admins
+//   u:<konto>:<version> – Lehrkräfte-Konto: nur eigene Räume (Version steigt bei Passwortwechsel/Sperre → alte Sitzungen ungültig)
+//   s:<raum>:<link>     – Aufsicht-Link eines Raums: nur dieser Raum, solange der Link nicht zurückgezogen ist
+// role: 'admin' = darf steuern, 'supervisor' = ansehen, Notfälle, Nachrichten. owner: wessen Räume „die eigenen“ sind.
+function principalFor(holder) {
+  if (holder === 'admin') return { kind: 'admin', role: 'admin', owner: 'admin', holder };
+  if (holder === 'supervisor') return SUPERVISOR_PASSWORD ? { kind: 'supervisor', role: 'supervisor', owner: 'admin', holder } : null;
+  const [type, id, ver] = holder.split(':');
+  if (type === 'u') {
+    const u = Object.hasOwn(state.users, id) ? state.users[id] : null;
+    if (!u || u.status !== 'active' || String(u.sessionVersion) !== ver) return null;
+    return { kind: 'manager', role: 'admin', owner: u.id, user: u, holder };
+  }
+  if (type === 's') {
+    const room = Object.hasOwn(state.rooms, id) ? state.rooms[id] : null;
+    if (!room || room.supLink?.id !== ver || !ownerActive(room)) return null;
+    return { kind: 'roomsup', role: 'supervisor', owner: null, roomId: room.id, holder };
+  }
+  return null;
+}
+
+// Gehört der Raum dem Admin oder einem aktiven Konto? (Aufsicht-Links gesperrter Konten gelten nicht)
+const ownerActive = (room) => room.ownerId === 'admin' || state.users[room.ownerId]?.status === 'active';
+
+function session(req) {
+  const [holder, exp, sig] = (parseCookies(req).mh_admin || '').split('.');
+  if (!holder || !sig || !(Number(exp) > Date.now()) || revoked.has(sig)) return null;
+  if (!safeEqual(sig, sign(`${holder}.${exp}`))) return null;
+  return principalFor(holder);
+}
+const sessionRole = (req) => session(req)?.role ?? null;
+
+// Sitzung für einen Inhaber ausstellen (siehe oben)
+function startSession(req, res, holder, ms) {
+  const exp = Date.now() + ms;
+  setAdminCookie(req, res, `${holder}.${exp}.${sign(`${holder}.${exp}`)}`, Math.round(ms / 1000));
 }
 
 function revokeSession(req) {
@@ -146,22 +187,40 @@ function setAdminCookie(req, res, value, maxAgeSec) {
   res.setHeader('Set-Cookie', `mh_admin=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSec}${secure}`);
 }
 
-// requireAdmin: nur Spielleitung. requireStaff: Spielleitung oder Aufsicht (ansehen, Notfälle, Nachrichten).
-function requireRole(req, allowSupervisor) {
-  const role = sessionRole(req);
-  if (!role) throw new HttpError(401, 'Bitte als Spielleitung anmelden.');
-  if (role === 'supervisor' && !allowSupervisor) throw new HttpError(403, 'Das darf nur die Spielleitung.');
+// requireLogin: irgendwer angemeldet (gibt den Inhaber zurück). requireSuperAdmin: nur der Admin (Konten, Server-Prüfung).
+function requireLogin(req) {
+  const p = session(req);
+  if (!p) throw new HttpError(401, 'Bitte als Spielleitung anmelden.');
   // Schutz gegen Cross-Site-Requests: nur eigene fetch()-Aufrufe setzen diesen Header
   if (req.method !== 'GET' && req.headers['x-requested-with'] !== 'manhunt') throw new HttpError(403, 'Ungültige Anfrage');
-  return role;
+  return p;
 }
-const requireAdmin = (req) => requireRole(req, false);
-const requireStaff = (req) => requireRole(req, true);
+function requireSuperAdmin(req) {
+  const p = requireLogin(req);
+  if (p.kind !== 'admin') throw new HttpError(403, 'Das darf nur der Admin.');
+  return p;
+}
+// Steuernde Rolle irgendwo (z. B. Raum anlegen): Admin oder Lehrkräfte-Konto
+function requireManager(req) {
+  const p = requireLogin(req);
+  if (p.role !== 'admin') throw new HttpError(403, 'Das darf nur die Spielleitung.');
+  return p;
+}
 
-function getRoom(id) {
+// Darf dieser Inhaber den Raum sehen? Der Admin sieht alle, Lehrkräfte und Aufsicht die eigenen bzw. den einen Raum
+const canView = (p, room) => p.kind === 'admin' || (p.kind === 'roomsup' ? room.id === p.roomId : room.ownerId === p.owner);
+// Alarme: nur aus den eigenen Räumen – auch der Admin bekommt keine Alarme aus Räumen anderer Lehrkräfte.
+// Ausnahme: Ist das Konto des Inhabers gesperrt, bekäme sonst niemand einen Notruf – dann geht er an den Admin.
+const ownsForAlerts = (p, room) => (p.kind === 'roomsup' ? room.id === p.roomId
+  : room.ownerId === p.owner || (p.kind === 'admin' && !ownerActive(room)));
+
+// Raum für eine Anfrage: fremde Räume gibt es für Unbefugte nicht (404). manage = steuern (nicht nur Aufsicht).
+function roomFor(req, id, { manage = false } = {}) {
+  const p = requireLogin(req);
   const room = Object.hasOwn(state.rooms, id) ? state.rooms[id] : null;
-  if (!room) throw new HttpError(404, 'Raum nicht gefunden');
-  return room;
+  if (!room || !canView(p, room)) throw new HttpError(404, 'Raum nicht gefunden');
+  if (manage && p.role !== 'admin') throw new HttpError(403, 'Das darf nur die Spielleitung.');
+  return { p, room };
 }
 
 function getRoomPlayer(room, pid) {
@@ -278,8 +337,9 @@ const translateError = (req, msg) => (req.headers['x-lang'] === 'en' && EN_ERROR
 
 module.exports = {
   sendJson, readJson, isHttps, rateLimit, limitKey, countOf, startRateLimitCleanup,
-  sign, safeEqual, sessionRole, revokeSession, setAdminCookie, requireAdmin, requireStaff,
-  getRoom, getRoomPlayer, authPlayer,
+  sign, safeEqual, session, sessionRole, principalFor, startSession, keyCount, requireOwnPage, ownerActive, revokeSession, setAdminCookie, parseCookies,
+  requireLogin, requireSuperAdmin, requireManager, canView, ownsForAlerts, roomFor, clientIp,
+  getRoomPlayer, authPlayer,
   route, dispatch, sendCsv, csvTime, fileSafe,
   setSecurityHeaders, translateError,
 };

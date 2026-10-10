@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const config = require('./config');
 const { state, playersOf } = require('./store');
-const { route, requireAdmin, isHttps } = require('./http');
+const { route, requireSuperAdmin, isHttps } = require('./http');
 const { tileHealth } = require('./tiles');
 
 const isInternal = (ip) => /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(ip)
@@ -80,11 +80,21 @@ async function setupChecks(req) {
   add(withBots.length ? 'warn' : 'ok', 'Test-Geräte',
     withBots.length ? `Test-Geräte in ${withBots.join(', ')} – vor dem echten Spiel entfernen (Probespiel → Test-Geräte entfernen).` : 'Keine Test-Geräte in den Räumen.');
 
+  // Lehrkräfte-Konten
+  const users = Object.values(state.users);
+  const pending = users.filter((u) => u.status === 'pending').length;
+  const active = users.filter((u) => u.status === 'active').length;
+  add(pending ? 'warn' : 'info', 'Lehrkräfte-Konten',
+    `${active} aktiv${pending ? `, ${pending} ${pending === 1 ? 'wartet' : 'warten'} auf Freigabe (Räume → Konten)` : ''} · Registrierung ${state.platform.registrationOpen ? 'offen (/registrieren)' : 'geschlossen'}.`);
+  if (users.length && !config.PRIVACY_OPERATOR) {
+    add('info', 'Betreiber-Angabe', 'Nutzen Lehrkräfte anderer Schulen die Plattform, PRIVACY_OPERATOR in der .env setzen (Betreiber der Plattform, z. B. Name und Anschrift) – er steht dann auf deren Datenschutz-Seite. Mit jeder Schule einen Vertrag zur Auftragsverarbeitung schließen.');
+  }
+
   add('info', 'Automatische Updates', 'Während der Fahrt ausschalten: autoupdate aus COMPOSE_PROFILES in der .env nehmen und docker compose rm -sf autoupdate ausführen.');
   return checks;
 }
 
 route('GET', '/api/admin/setup-check', async (req) => {
-  requireAdmin(req);
+  requireSuperAdmin(req);
   return { checks: await setupChecks(req), serverTime: Date.now(), version: config.VERSION, build: config.BUILD };
 });

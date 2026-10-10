@@ -994,3 +994,20 @@ body.mission .time-btns .btn { flex: 1 1 0; }
 .legend-dot.sos { background: #c62828; }
 .ncard header .ncard-brand { display: flex; align-items: center; gap: 1.5mm; }
 .ncard header img { width: 5mm; height: 5mm; }
+
+/* ---------------------------------------------------------------------------
+   Lehrkräfte-Konten: nur für den Admin bzw. nur für Lehrkräfte sichtbare Teile, Konten-Liste
+   --------------------------------------------------------------------------- */
+body:not(.kind-admin) .superadmin-only { display: none !important; }
+body:not(.kind-manager) .manager-only { display: none !important; }
+.room-filter { margin-bottom: .75rem; }
+.room-owner { color: var(--muted); font-weight: 600; }
+.owner-badge { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.owner-box { margin-top: .75rem; padding-top: .75rem; border-top: 1px dashed var(--border); }
+.overlay .card.accounts-card { max-width: 640px; }
+.accounts-card h3 { margin: .5rem 0 0; }
+.account-list li { display: flex; flex-direction: column; align-items: stretch; gap: .3rem; padding: .7rem 0; }
+.account-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.account-item.pending { background: color-mix(in srgb, var(--amber) 12%, transparent); margin: 0 -.5rem; padding: .7rem .5rem; border-radius: 8px; }
+.link-box { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .75rem; background: var(--surface-2); }
+#whoami { font-weight: 600; }

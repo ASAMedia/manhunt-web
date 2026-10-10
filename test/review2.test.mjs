@@ -73,7 +73,7 @@ export default async function review2({ base, adminPass, supPass, check, section
   let v6 = 0;
   for (let i = 1; i <= 12 && !v6; i++) {
     const r = await fetch(`${base}/api/admin/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `2001:db8:77:1::${i.toString(16)}` },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'manhunt', 'X-Forwarded-For': `2001:db8:77:1::${i.toString(16)}` },
       body: JSON.stringify({ password: 'falsch-falsch' }),
     });
     if (r.status === 429) v6 = i;
@@ -113,7 +113,7 @@ export default async function review2({ base, adminPass, supPass, check, section
   });
   check(qr.status === 200 && qr.headers.get('content-type').includes('svg') && qr.headers.get('cache-control') === 'no-store', 'QR per POST, nicht zwischengespeichert');
   const errRes = await fetch(`${base}/api/client-error`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.7' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'manhunt', 'X-Forwarded-For': '198.51.100.7' },
     body: JSON.stringify({ message: 'Fehler beim Beitreten', page: `/j/${room.code}` }),
   });
   const errs = (await req('GET', '/api/admin/client-errors', undefined, A)).data;
@@ -185,7 +185,7 @@ export default async function review2({ base, adminPass, supPass, check, section
 
 async function cookieOf(base, password) {
   const r = await fetch(`${base}/api/admin/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.51' }, body: JSON.stringify({ password }),
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'manhunt', 'X-Forwarded-For': '203.0.113.51' }, body: JSON.stringify({ password }),
   });
   return r.headers.get('set-cookie').split(';')[0];
 }

@@ -5,7 +5,9 @@
 const fs = require('node:fs');
 const { STATE_FILE, MAX_EVENTS } = require('./config');
 
-const state = { rooms: {} };
+// rooms: Spielräume · users: Lehrkräfte-Konten · platform: Einstellungen des Admins (z. B. Registrierung offen)
+// Registrierung zunächst geschlossen – der Admin öffnet sie bewusst unter „Konten“
+const state = { rooms: {}, users: {}, platform: { registrationOpen: false } };
 const tokenIndex = new Map(); // Spieler-Token -> { roomId, playerId }
 let dirty = false;
 
@@ -14,7 +16,10 @@ const playersOf = (room) => Object.values(room.players);
 // migrateRoom ergänzt Räume aus älteren Versionen um neue Felder
 function loadState(migrateRoom) {
   try {
-    state.rooms = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')).rooms || {};
+    const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    state.rooms = saved.rooms || {};
+    state.users = saved.users || {};
+    state.platform = { ...state.platform, ...saved.platform };
   } catch (e) {
     if (e.code !== 'ENOENT') console.error('state.json konnte nicht gelesen werden:', e.message);
   }

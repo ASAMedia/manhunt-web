@@ -2,7 +2,7 @@
 
 // Sichten: was die Spielleitung bzw. ein Gerät vom Raum zu sehen bekommt
 
-const { playersOf } = require('./store');
+const { state, playersOf } = require('./store');
 const { currentZone, roomWarnings, activeEmergency, autoDeleteAt, roundMinutes } = require('./game');
 
 function publicPlayer(p) {
@@ -48,7 +48,11 @@ function roomSummary(room) {
 }
 
 // role: 'admin' oder 'supervisor' – den Wiederbeitritts-Link (Zugang als dieses Gerät) bekommt nur die Spielleitung
-function adminRoom(room, role = 'admin') {
+// viewer: der angemeldete Inhaber (oder nur die Rolle). Zugangsschlüssel (Wiederbeitritts-Links, Aufsicht-Link) bekommt
+// nur die Spielleitung des Raums – der Admin sieht fremde Räume, aber ohne diese Schlüssel (kann nicht als Schüler auftreten).
+function adminRoom(room, viewer = 'admin') {
+  const role = typeof viewer === 'string' ? viewer : viewer.role;
+  const secrets = role === 'admin' && !(viewer?.kind === 'admin' && room.ownerId !== 'admin');
   const warnings = roomWarnings(room);
   return {
     ...roomSummary(room),
@@ -56,7 +60,7 @@ function adminRoom(room, role = 'admin') {
     ...zoneView(room),
     players: playersOf(room).map((p) => ({
       ...publicPlayer(p),
-      ...(role === 'admin' && { rejoinPath: `/r/${p.token}` }),
+      ...(secrets && { rejoinPath: `/r/${p.token}` }),
       emergency: !!activeEmergency(room, p.id),
       warnings: warnings.filter((w) => w.playerId === p.id).map((w) => ({ type: w.type, since: w.since, acked: w.acked })),
     })),
@@ -64,6 +68,10 @@ function adminRoom(room, role = 'admin') {
     replayPings: room.pings.length,
     events: room.events.slice(-100).map(({ at, text }) => ({ at, text })),
     rounds: room.rounds,
+    ownerId: room.ownerId,
+    ownerName: room.ownerId === 'admin' ? 'Admin' : state.users[room.ownerId]?.name ?? 'gelöschtes Konto',
+    // Aufsicht-Link (Zugang zu genau diesem Raum) – wie der Wiederbeitritts-Link nur für die Spielleitung
+    supToken: secrets ? room.supLink?.token ?? null : undefined,
     serverTime: Date.now(),
   };
 }
