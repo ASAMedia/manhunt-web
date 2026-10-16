@@ -1,5 +1,7 @@
 # Manhunt – Web
 
+![Spielfeld in Berlin Mitte mit den Pings der Gejagten, daneben die Handys einer Gejagten und eines Jäger-Teams](docs/bilder/titelbild.jpg)
+
 Browserbasiertes Fang- und Versteckspiel („Manhunt“ / „Mister X“) für Gruppen, z. B. auf Klassenfahrt.
 Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird mit Docker selbst gehostet.
 
@@ -7,6 +9,22 @@ Läuft im Browser – **keine App aus dem Store, keine Accounts** – und wird m
 - **Aufsicht (optional):** eine zweite Person mit eigenem Passwort, die zusieht und Notfälle bearbeitet.
 - **Gejagte** (ein Handy pro Person): werden den Jägern nur zu den Ping-Zeitpunkten gezeigt.
 - **Jäger-Teams** (ein Handy pro Team): sehen die letzten Pings der Gejagten und die anderen Jäger-Teams live.
+
+## So sieht es aus
+
+![Handyansicht einer Gejagten und eines Jäger-Teams](docs/bilder/gejagt-und-jaeger.jpg)
+
+*Links eine Gejagte: Beim letzten Ping sieht sie die Jäger (orange) und die anderen Gejagten (blau), darunter Ping-Ring, Spielende, „Ich wurde gefangen“, Block und Verkehrsmittel. Rechts ein Jäger-Team: die Gejagten vom letzten Ping mit Alter, die anderen Teams live, Extra-Ping und Treffpunkt.*
+
+![Spielleitung am Rechner mit Notruf, Akku-Warnung, Geräteliste und Karte](docs/bilder/spielleitung.jpg)
+
+*Spielleitung am Rechner: Notruf mit Standort und Route, Akku-Warnung, Alarmton-Check, Geräteliste mit Status, Signal und Akku, alle Geräte auf der Karte.*
+
+![Ping-Replay für den Beamer und Ergebnis-Bildschirm auf dem Handy](docs/bilder/replay-und-ergebnis.jpg)
+
+*Nach dem Spiel: Ping-Replay als Zeitraffer für den Beamer und Ergebnis-Bildschirm mit Bestenliste „am längsten frei“.*
+
+<sub>Bildschirmfotos einer Demo-Runde mit erfundenen Namen. Karten: © [OpenStreetMap-Mitwirkende](https://www.openstreetmap.org/copyright).</sub>
 
 ## Funktionen
 
